@@ -16,70 +16,107 @@ from shop.models import Contact, Product
 
 
 class CheckoutForm(shop_forms.BaseCheckoutForm):
-    class Meta:
-        fields = ['email'] + ['billing_%s' % f for f in Contact.ADDRESS_FIELDS]
-        model = Order
+	class Meta:
+		fields = ['email'] + ['billing_%s' % f for f in Contact.ADDRESS_FIELDS]
+		model = Order
 
-    def __init__(self, *args, **kwargs):
-        shop = kwargs.get('shop')
-        request = kwargs.get('request')
-        contact = shop.contact_from_user(request.user)
+	def __init__(self, *args, **kwargs):
+		shop = kwargs.get('shop')
+		request = kwargs.get('request')
+		contact = shop.contact_from_user(request.user)
 
-        if contact:
-            initial = {}
-            for f in contact.ADDRESS_FIELDS:
-                initial['billing_%s' % f] = getattr(contact, f)
-                kwargs['initial'] = initial
-            initial['email'] = contact.user.email
+		if contact:
+			initial = {}
+			for f in contact.ADDRESS_FIELDS:
+				initial['billing_%s' % f] = getattr(contact, f)
+				kwargs['initial'] = initial
+			initial['email'] = contact.user.email
 
-        super(CheckoutForm, self).__init__(*args, **kwargs)
+		super(CheckoutForm, self).__init__(*args, **kwargs)
 
-        if not contact:
-            self.fields['create_account'] = forms.BooleanField(
-                label=_('create account'),
-                required=False, initial=True)
+		if not contact:
+			self.fields['create_account'] = forms.BooleanField(
+				label=_('create account'),
+				required=False, initial=True)
 
 
 class CustomShop(Shop):
-    def checkout_form(self, request, order):
-        return CheckoutForm
+	def checkout_form(self, request, order):
+		return CheckoutForm
 
 shop = CustomShop(Contact, Order, Discount)
 
 
 product_list = generic.ListView.as_view(
-    queryset=Product.objects.filter(is_active=True),
-    template_name='product/product_list.html',
-    )
+	queryset=Product.objects.filter(is_active=True),
+	template_name='product/product_list.html',
+	)
 
 
 class OrderItemForm(forms.Form):
-    quantity = forms.IntegerField(label=_('quantity'), initial=1,
-        min_value=1, max_value=100)
+	quantity = forms.IntegerField(label=_('quantity'), initial=1,
+		min_value=1, max_value=100)
 
-
+import paypalrestsdk
 def product_detail(request, object_id):
-    product = get_object_or_404(Product.objects.filter(is_active=True), pk=object_id)
+	product = get_object_or_404(Product.objects.filter(is_active=True), pk=object_id)
 
-    if request.method == 'POST':
-        form = OrderItemForm(request.POST)
+	api = paypalrestsdk.configure({
+		"mode": "sandbox",
+		"client_id": "AaHStRCheAnmoCT2nhk7HUreN70_ERBvO-75hQzmG_MLI98ISEX9iWFmGLzh",
+		"client_secret": "EN3whxCyg-hQeeMxxXlmunXHbno_OtqVpuJpeJFYAbZEbE8xav2ugJvqTMgr"
+	})
 
-        if form.is_valid():
-            order = shop.order_from_request(request, create=True)
-            try:
-                order.modify_item(product, form.cleaned_data.get('quantity'))
-                messages.success(request, _('The cart has been updated.'))
-            except ValidationError, e:
-                if e.code == 'order_sealed':
-                    [messages.error(request, msg) for msg in e.messages]
-                else:
-                    raise
+	payment = paypalrestsdk.Payment({
+	  "intent": "sale",
+	  "payer": {
+		"payment_method": "credit_card",
+		"funding_instruments": [{
+		  "credit_card": {
+			"type": "visa",
+			"number": "4417119669820331",
+			"expire_month": "11",
+			"expire_year": "2018",
+			"cvv2": "874",
+			"first_name": "Joe",
+			"last_name": "Shopper" }}]},
+	  "transactions": [{
+		"item_list": {
+		  "items": [{
+			"name": "item",
+			"sku": "item",
+			"price": "1.00",
+			"currency": "USD",
+			"quantity": 1 }]},
+		"amount": {
+		  "total": "1.00",
+		  "currency": "USD" },
+		"description": "This is the payment transaction description." }]})
 
-            return redirect('plata_shop_cart')
-    else:
-        form = OrderItemForm()
+	if payment.create():
+		print payment
+		print("Payment created successfully")
+	else:
+	 	print(payment.error)
+	if request.method == 'POST':
+		form = OrderItemForm(request.POST)
 
-    return render_to_response('product/product_detail.html', {
-        'object': product,
-        'form': form,
-        }, context_instance=RequestContext(request))
+		if form.is_valid():
+			order = shop.order_from_request(request, create=True)
+			try:
+				order.modify_item(product,  form.cleaned_data.get('quantity'))
+				messages.success(request, _('The cart has been updated.'))
+			except ValidationError, e:
+				if e.code == 'order_sealed':
+					[messages.error(request, msg) for msg in e.messages]
+				else:
+					raise
+
+			return redirect('plata_product_list')
+	else:
+		form = OrderItemForm()
+
+	return render_to_response('product/product_detail.html', {
+		'object': product,
+		'form': form,
+		}, context_instance=RequestContext(request))

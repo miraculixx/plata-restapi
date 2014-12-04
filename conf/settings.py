@@ -108,18 +108,20 @@ STATIC_URL = '/static/'
 
 PAYPAL_RESTPAYMENT = {
     'mode': 'sandbox',
-    'client_id': '...',
-    'client_secret': '...'
+    'client_id': 'AaHStRCheAnmoCT2nhk7HUreN70_ERBvO-75hQzmG_MLI98ISEX9iWFmGLzh',
+    'client_secret': 'EN3whxCyg-hQeeMxxXlmunXHbno_OtqVpuJpeJFYAbZEbE8xav2ugJvqTMgr'
 }
 
-
-
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+TEMPLATE_DIRS = (
+    os.path.join(BASE_DIR, 'templates'),
+)
 
 # PLATA settings
 
 #PLATA_PRICE_INCLUDES_TAX = False
 
-PLATA_SHOP_CONTACT = 'custom.Contact'
+PLATA_SHOP_CONTACT = 'shop.Contact'
 
 
 POSTFINANCE = {
@@ -134,14 +136,14 @@ PLATA_PAYMENT_MODULE_NAMES = {
     }
 
 PAYPAL = {
-    'BUSINESS': 'huymac@magrabbit.com',
+    'BUSINESS': 'macanhhuy@gmail.com',
     'LIVE': False,
     }
 
 PLATA_REPORTING_ADDRESSLINE = 'Example Corp. - 3. Example Street - 1234 Example'
 
-TEST_RUNNER = 'options.test_utils.test_runner_with_coverage'
-COVERAGE_MODULES = ['plata']
+# TEST_RUNNER = 'options.test_utils.test_runner_with_coverage'
+# COVERAGE_MODULES = ['plata']
 
 import logging, sys
 logging.basicConfig(

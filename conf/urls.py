@@ -9,7 +9,7 @@ admin.autodiscover()
 
 urlpatterns = patterns('',
     url(r'^admin/', include(admin.site.urls)),
-
+    url(r'', include(shop.urls)),
     url(r'^$', lambda request: redirect('plata_product_list')),
     url(r'^products/$', 'shop.views.product_list',
         name='plata_product_list'),
