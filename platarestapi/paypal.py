@@ -12,191 +12,65 @@ from django.views.decorators.csrf import csrf_exempt
 import plata
 from plata.payment.modules.base import ProcessorBase
 from plata.shop.models import OrderPayment
+from platarestapi.utils import *
+from paypalrestsdk import Capture, ResourceNotFound
+
+csrf_exempt_m = method_decorator(csrf_exempt)
 
 
 logger = logging.getLogger('platarestapi.paypal')
 
-csrf_exempt_m = method_decorator(csrf_exempt)
-
-import paypalrestsdk
-
-api = paypalrestsdk.configure({
-    "mode": "sandbox",
-    "client_id": "AaHStRCheAnmoCT2nhk7HUreN70_ERBvO-75hQzmG_MLI98ISEX9iWFmGLzh",
-    "client_secret": "EN3whxCyg-hQeeMxxXlmunXHbno_OtqVpuJpeJFYAbZEbE8xav2ugJvqTMgr"
-})
 
 class PaymentProcessor(ProcessorBase):
-    key = 'paypalmobile'
+    key = 'paypalrestapi'
     default_name = _('Paypal')
 
-    def get_urls(self):
-        from django.conf.urls import patterns, url
-
-        return patterns(
-            '',
-            url(r'^payment/paypal/ipn/$', self.ipn,
-                name='plata_payment_paypal_ipn'),
-        )
-
     def process_order_confirmed(self, request, order):
-        PAYPAL = settings.PAYPAL
+        data = json.loads(request.body)
+        result, message = charge_wallet(
+        transaction=data.get('transactions')[0], customer_id=data.get('customer_id'),
+        correlation_id=data.get('correlation_id'), intent=data.get('intent')
+        )
 
         if not order.balance_remaining:
             return self.already_paid(order)
-
         logger.info('Processing order %s using Paypal' % order)
-
-        payment = self.create_pending_payment(order)
-        if plata.settings.PLATA_STOCK_TRACKING:
-            StockTransaction = plata.stock_model()
-            self.create_transactions(
-                order, _('payment process reservation'),
-                type=StockTransaction.PAYMENT_PROCESS_RESERVATION,
-                negative=True, payment=payment)
-
-        if PAYPAL['LIVE']:
-            PP_URL = "https://www.paypal.com/cgi-bin/webscr"
+        if order.payments.first():
+            payment = order.payments.first()
         else:
-            PP_URL = "https://www.sandbox.paypal.com/cgi-bin/webscr"
-
-        return self.shop.render(request, 'payment/%s_form.html' % self.key, {
-            'order': order,
-            'payment': payment,
-            'RETURN_SCHEME': PAYPAL.get(
-                'RETURN_SCHEME',
-                'https' if request.is_secure() else 'http'
-            ),
-            'IPN_SCHEME': PAYPAL.get('IPN_SCHEME', 'http'),
-            'HTTP_HOST': request.META.get('HTTP_HOST'),
-            'post_url': PP_URL,
-            'business': PAYPAL['BUSINESS'],
-        })
-
-    @csrf_exempt_m
-    def ipn(self, request):
-        if not request._read_started:
-            if 'windows-1252' in request.body:
-                if request.encoding != 'windows-1252':
-                    request.encoding = 'windows-1252'
-        else:  # middleware (or something else?) has triggered request reading
-            if request.POST.get('charset') == 'windows-1252':
-                if request.encoding != 'windows-1252':
-                    # since the POST data has already been accessed,
-                    # unicode characters may have already been lost and
-                    # cannot be re-encoded.
-                    # -- see https://code.djangoproject.com/ticket/14035
-                    # Unfortunately, PayPal:
-                    # a) defaults to windows-1252 encoding (why?!)
-                    # b) doesn't indicate this in the Content-Type header
-                    #    so Django cannot automatically detect it.
-                    logger.warning(
-                        'IPN received with charset=windows1252, however '
-                        'the request encoding does not match. It may be '
-                        'impossible to verify this IPN if the data contains '
-                        'non-ASCII characters. Please either '
-                        'a) update your PayPal preferences to use UTF-8 '
-                        'b) configure your site so that IPN requests are '
-                        'not ready before they reach the hanlder'
-                    )
-
-        PAYPAL = settings.PAYPAL
-
-        if PAYPAL['LIVE']:
-            PP_URL = "https://www.paypal.com/cgi-bin/webscr"
-        else:
-            PP_URL = "https://www.sandbox.paypal.com/cgi-bin/webscr"
-
-        parameters = None
-
+            payment = self.create_pending_payment(order)
+        data = payment.data
         try:
-            parameters = request.POST.copy()
-            parameters_repr = repr(parameters).encode('utf-8')
-
-            if parameters:
-                logger.info(
-                    'IPN: Processing request data %s' % parameters_repr)
-
-                querystring = 'cmd=_notify-validate&%s' % (
-                    request.POST.urlencode()
-                )
-                status = urllib2.urlopen(PP_URL, querystring).read()
-
-                if not status == "VERIFIED":
-                    logger.error(
-                        'IPN: Received status %s, '
-                        'could not verify parameters %s' % (
-                            status,
-                            parameters_repr
-                        )
-                    )
-                    logger.debug('Destination: %r ? %r', PP_URL, querystring)
-                    logger.debug('Request: %r', request)
-                    return HttpResponseForbidden('Unable to verify')
-
-            if parameters:
-                logger.info('IPN: Verified request %s' % parameters_repr)
-                reference = parameters['txn_id']
-                invoice_id = parameters['invoice']
-                currency = parameters['mc_currency']
-                amount = parameters['mc_gross']
-
-                try:
-                    order, order_id, payment_id = invoice_id.split('-')
-                except ValueError:
-                    logger.error(
-                        'IPN: Error getting order for %s' % invoice_id)
-                    return HttpResponseForbidden('Malformed order ID')
-
-                try:
-                    order = self.shop.order_model.objects.get(pk=order_id)
-                except (self.shop.order_model.DoesNotExist, ValueError):
-                    logger.error('IPN: Order %s does not exist' % order_id)
-                    return HttpResponseForbidden(
-                        'Order %s does not exist' % order_id)
-
-                try:
-                    payment = order.payments.get(pk=payment_id)
-                except (order.payments.model.DoesNotExist, ValueError):
-                    payment = order.payments.model(
-                        order=order,
-                        payment_module=u'%s' % self.name,
-                    )
-
-                payment.status = OrderPayment.PROCESSED
-                payment.currency = currency
-                payment.amount = Decimal(amount)
-                payment.data = request.POST.copy()
-                payment.transaction_id = reference
-                payment.payment_method = payment.payment_module
-
-                if parameters['payment_status'] == 'Completed':
-                    payment.authorized = timezone.now()
-                    payment.status = OrderPayment.AUTHORIZED
-
-                payment.save()
-                order = order.reload()
-
-                logger.info(
-                    'IPN: Successfully processed IPN request for %s' % order)
-
-                if payment.authorized and plata.settings.PLATA_STOCK_TRACKING:
-                    StockTransaction = plata.stock_model()
-                    self.create_transactions(
-                        order,
-                        _('sale'),
-                        type=StockTransaction.SALE,
-                        negative=True,
-                        payment=payment)
-
-                if not order.balance_remaining:
-                    self.order_paid(order, payment=payment, request=request)
-
-                return HttpResponse("Ok")
-
+            # print data.get('transactions')[0].get('related_resources')[0].get('sale').get('id')
+            # pp_transaction_id = data.get('transactions')[0].get('related_resources')[0].get('sale').get('id')
+            # capture = Capture.find(pp_transaction_id)
+            #
+            #
+            # amount_client = capture.amount.total
+            # currency_client = capture.amount.currency
+            # sale_state = capture.state
+            #
+            # amount_server = order.total
+            # currency_server = order.currency
+            #
+            #
+            # if (Decimal(amount_server) != Decimal(amount_client)):
+            #     print amount_server
+            #     print amount_client
+            #     msg = 'Payment amount does not match order.'
+            # elif (currency_client != currency_server):
+            #     msg = 'Payment currency does not match order.'
+            # elif sale_state != 'completed':
+            #     msg = 'Sale not completed.'
+            # else:
+            #     msg = 'Payment has been completed.'
+            data["capture"] = {
+                 "request":  json.loads(json.dumps(request.body, ensure_ascii=False)),
+                 "response": json.loads(json.dumps(str(request.body)))
+          }
         except Exception, e:
-            logger.error('IPN: Processing failure %s' % unicode(e))
-            raise
-        else:
-            logger.warning('IPN received without POST parameters')
-            return HttpResponseForbidden('No parameters provided')
+            print str(e)
+
+        payment.data = data
+        payment.save()
+        return JsonResponse({"payment_id": payment.id, "msg": message})

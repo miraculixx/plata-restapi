@@ -58,65 +58,36 @@ class OrderItemForm(forms.Form):
 		min_value=1, max_value=100)
 
 import paypalrestsdk
-def product_detail(request, object_id):
-	product = get_object_or_404(Product.objects.filter(is_active=True), pk=object_id)
-
-	api = paypalrestsdk.configure({
+paypalrestsdk.configure({
 		"mode": "sandbox",
 		"client_id": "AaHStRCheAnmoCT2nhk7HUreN70_ERBvO-75hQzmG_MLI98ISEX9iWFmGLzh",
 		"client_secret": "EN3whxCyg-hQeeMxxXlmunXHbno_OtqVpuJpeJFYAbZEbE8xav2ugJvqTMgr"
-	})
+})
+def product_detail(request, object_id):
+    product = get_object_or_404(Product.objects.filter(is_active=True), pk=object_id)
+    capture = paypalrestsdk.Capture("PAY-09Y60671AN704914NKSBTIAI")
+    print capture
+    print "xxx"
+    if request.method == 'POST':
+        form = OrderItemForm(request.POST)
 
-	payment = paypalrestsdk.Payment({
-	  "intent": "sale",
-	  "payer": {
-		"payment_method": "credit_card",
-		"funding_instruments": [{
-		  "credit_card": {
-			"type": "visa",
-			"number": "4417119669820331",
-			"expire_month": "11",
-			"expire_year": "2018",
-			"cvv2": "874",
-			"first_name": "Joe",
-			"last_name": "Shopper" }}]},
-	  "transactions": [{
-		"item_list": {
-		  "items": [{
-			"name": "item",
-			"sku": "item",
-			"price": "1.00",
-			"currency": "USD",
-			"quantity": 1 }]},
-		"amount": {
-		  "total": "1.00",
-		  "currency": "USD" },
-		"description": "This is the payment transaction description." }]})
+        if form.is_valid():
+            order = shop.order_from_request(request, create=True)
+            try:
+                order.modify_item(product,  form.cleaned_data.get('quantity'))
+                messages.success(request, _('The cart has been updated.'))
+            except ValidationError, e:
+             if e.code == 'order_sealed':
+                [messages.error(request, msg) for msg in e.messages]
+            else:
+                raise
 
-	if payment.create():
-		print payment
-		print("Payment created successfully")
-	else:
-	 	print(payment.error)
-	if request.method == 'POST':
-		form = OrderItemForm(request.POST)
+            return redirect('plata_product_list')
 
-		if form.is_valid():
-			order = shop.order_from_request(request, create=True)
-			try:
-				order.modify_item(product,  form.cleaned_data.get('quantity'))
-				messages.success(request, _('The cart has been updated.'))
-			except ValidationError, e:
-				if e.code == 'order_sealed':
-					[messages.error(request, msg) for msg in e.messages]
-				else:
-					raise
+    else:
+        form = OrderItemForm()
 
-			return redirect('plata_product_list')
-	else:
-		form = OrderItemForm()
-
-	return render_to_response('product/product_detail.html', {
-		'object': product,
-		'form': form,
-		}, context_instance=RequestContext(request))
+    return render_to_response('product/product_detail.html', {
+    'object': product,
+    'form': form,
+    }, context_instance=RequestContext(request))
