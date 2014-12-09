@@ -1,5 +1,5 @@
 Django==1.6
-Plata==1.2.0.pre
+git+https://github.com/miraculixx/plata@deploy#egg=plata
 argparse==1.2.1
 cffi==0.8.6
 cryptography==0.6.1
