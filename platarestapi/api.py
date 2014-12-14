@@ -134,17 +134,16 @@ class PaymentResource(ModelResource, PaymentProcessor):
     def verify(self, request, **kwargs):
         pk = kwargs['pk']
         payment = OrderPayment.objects.get(pk=pk)
-        payment_id = payment.transaction_id
         message = ''
-
         try:
-            result, message = verify_payment(payment, payment_id)
+            result, message = verify_payment(payment)
         except:
             pass
         return JsonResponse({"status": "success", "msg": message})
 
     @action(allowed=['put'], require_loggedin=True)
     def capture(self, request, **kwargs):
+        print request
         pk = kwargs['pk']
         payment = OrderPayment.objects.get(pk=pk)
         return self.process_order_confirmed(request, payment.order)
@@ -156,22 +155,37 @@ class PaymentResource(ModelResource, PaymentProcessor):
     def obj_update(self, bundle, skip_errors=False, **kwargs):
         '''
         {
-           "response":{
-              "state":"approved",
-              "id":"PAY-6PU626847B294842SKPEWXHY",
-              "create_time":"2014-07-18T18:46:55Z",
-              "intent":"sale"
-           },
-           "client":{
-              "platform":"Android",
-              "paypal_sdk_version":"2.7.1",
-              "product_name":"PayPal-Android-SDK",
-              "environment":"mock"
-           },
-           "response_type":"payment"
+             "response": {
+                "state": "approved",
+                "id": "PAY-6PU626847B294842SKPEWXHY",
+                "create_time": "2014-07-18T18:46:55Z",
+                "intent": "sale"
+             },
+            "client": {
+                "platform": "Android",
+                "paypal_sdk_version": "2.7.1",
+                "product_name": "PayPal-Android-SDK",
+                "environment": "mock"
+            },
+            "response_type": "payment"
         }
+
+
+        {
+            "response": {
+                "code": "mock_code_EJhi9jOPswug9TDOv93qg4Y28xIlqPDpAoqd7biDLpeGCPvORHjP1Fh4CbFPgKMGCHejdDwe9w1uDWnjPCp1lkaFBjVmjvjpFtnr6z1YeBbmfZYqa9faQT_71dmgZhMIFVkbi4yO7hk0LBHXt_wtdsw"
+            },
+            "client": {
+                "platform": "Android",
+                "paypal_sdk_version": "2.7.1",
+                "product_name": "PayPal-Android-SDK",
+                "environment": "mock"
+            },
+            "response_type": "authorization_code"
+         }
         android create avd --name Default --target android-19 --abi armeabi-v7a
         '''
+        print bundle.request
         pk = kwargs['pk']
         payment = OrderPayment.objects.get(pk=pk)
         body = json.loads(bundle.request.body)
@@ -179,7 +193,7 @@ class PaymentResource(ModelResource, PaymentProcessor):
         data["create"] = {
             "response": body
         }
-        payment.transaction_id = body.get('response').get('id')
+        payment.transaction_id = body.get('response').get('id', '')
         payment.data = data
         payment.save()
         bundle.obj = payment
