@@ -155,34 +155,33 @@ class PaymentResource(ModelResource, PaymentProcessor):
     def obj_update(self, bundle, skip_errors=False, **kwargs):
         '''
         {
-             "response": {
+            "response": {
                 "state": "approved",
-                "id": "PAY-6PU626847B294842SKPEWXHY",
-                "create_time": "2014-07-18T18:46:55Z",
+                "id": "PAY-8XS49767G4008033KKSJQG6Y",
+                "create_time": "2014-12-18T16:40:27Z",
                 "intent": "sale"
-             },
+            },
             "client": {
                 "platform": "Android",
                 "paypal_sdk_version": "2.7.1",
                 "product_name": "PayPal-Android-SDK",
-                "environment": "mock"
+                "environment": "sandbox"
             },
-            "response_type": "payment"
-        }
+             "response_type": "payment"
 
 
         {
             "response": {
-                "code": "mock_code_EJhi9jOPswug9TDOv93qg4Y28xIlqPDpAoqd7biDLpeGCPvORHjP1Fh4CbFPgKMGCHejdDwe9w1uDWnjPCp1lkaFBjVmjvjpFtnr6z1YeBbmfZYqa9faQT_71dmgZhMIFVkbi4yO7hk0LBHXt_wtdsw"
-            },
+                "code": "ELv4d7jue8mm5WLgaEzgXSSO4XzLJgwXp3ZzKHTQSK7kWAKMTC1jMABmGfkswI-LOODL-i3ZPQmMujWRr6d6DibSBI1K3ZVujkqLmpiXr6h3YE-FpFU5X3nP-i7aN2K_n2xtMBpA5pe4idXp9cYjZuI"
+                },
             "client": {
                 "platform": "Android",
                 "paypal_sdk_version": "2.7.1",
-                "product_name": "PayPal-Android-SDK",
-                "environment": "mock"
+                 "product_name": "PayPal-Android-SDK",
+                "environment": "sandbox"
             },
-            "response_type": "authorization_code"
-         }
+             "response_type": "authorization_code"
+        }
         android create avd --name Default --target android-19 --abi armeabi-v7a
         '''
         print bundle.request
