@@ -172,16 +172,16 @@ class PaymentResource(ModelResource, PaymentProcessor):
 
         {
             "response": {
-                "code": "ELv4d7jue8mm5WLgaEzgXSSO4XzLJgwXp3ZzKHTQSK7kWAKMTC1jMABmGfkswI-LOODL-i3ZPQmMujWRr6d6DibSBI1K3ZVujkqLmpiXr6h3YE-FpFU5X3nP-i7aN2K_n2xtMBpA5pe4idXp9cYjZuI"
-                },
+                "code": "EGZU4qcUF7hBLSzo4toZ5QlKwNR7dXbookRNvVhATn_l-EJNj1b3naxqZBbryG4F3ujWqf3a7TmM-bfA1v21S9Vptnj_VYV51FJTEZtCn0E-ZF2YgKeYmyw60W8d1xAePUt4c0zbYhRrSRiDgdnoQJ4"
+            },
             "client": {
                 "platform": "Android",
                 "paypal_sdk_version": "2.7.1",
-                 "product_name": "PayPal-Android-SDK",
+                "product_name": "PayPal-Android-SDK",
                 "environment": "sandbox"
             },
-             "response_type": "authorization_code"
-        }
+            "response_type": "authorization_code"
+            }
         android create avd --name Default --target android-19 --abi armeabi-v7a
         '''
         print bundle.request

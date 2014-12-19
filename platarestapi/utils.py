@@ -49,7 +49,7 @@ def verify_payment(payment):
             transaction = payment_server.transactions[0]
             amount_server = transaction.amount.total
             currency_server = transaction.amount.currency
-            sale_state = transaction.related_resources[0].sale.state
+            sale_state = transaction.related_resources[0].authorization.state
 
             if (Decimal(amount_server) != Decimal(amount_client)):
                 return False, 'Payment amount does not match order.'
@@ -58,7 +58,7 @@ def verify_payment(payment):
             elif sale_state != 'completed':
                 return False, 'Sale not completed.'
             else:
-                return True, 'Payment has been verified.'
+                return True, 'Payment has been authorized.'
         elif response_type == 'authorization_code':
             return True, 'Received consent'
 
@@ -82,6 +82,89 @@ def get_refresh_token(customer_id=None, auth_code=None):
 def charge_wallet(transaction, customer_id=None, correlation_id=None, intent="authorize"):
     """Charge a customer who formerly consented to future payments
     from paypal wallet.
+    {
+       'update_time':   u'2014-12-19T14:26:49   Z',
+       'payer':{
+          'payment_method':u'paypal',
+          'status':u'VERIFIED',
+          'payer_info':{
+             'first_name':u'SandboxTest',
+             'last_name':u'Account',
+             'email':u'huy@mac.com',
+             'payer_id':u'H7ZBSNRZ5C7DL'
+          }
+       },
+       'links':[
+          {
+             'href':         u'https://api.sandbox.paypal.com/v1/payments/payment/PAY-0BV260076T944302DKSKDLJY',
+             'method':u'GET',
+             'rel':u'self'
+          }
+       ],
+       'transactions':[
+          {
+             'amount':{
+                'currency':u'USD',
+                'total':u'100.00',
+                'details':{
+                   'subtotal':u'100.00'
+                }
+             },
+             'related_resources':[
+                {
+                   'authorization':{
+                      'valid_until':                  u'2015-01-17T14:26:47                  Z',
+                      'protection_eligibility':u'INELIGIBLE',
+                      'update_time':                  u'2014-12-19T14:26:49                  Z',
+                      'links':[
+                         {
+                            'href':                        u'https://api.sandbox.paypal.com/v1/payments/authorization/1U302828U8702213S',
+                            'method':u'GET',
+                            'rel':u'self'
+                         },
+                         {
+                            'href':                        u'https://api.sandbox.paypal.com/v1/payments/authorization/1U302828U8702213S/capture',
+                            'method':u'POST',
+                            'rel':u'capture'
+                         },
+                         {
+                            'href':                        u'https://api.sandbox.paypal.com/v1/payments/authorization/1U302828U8702213S/void',
+                            'method':u'POST',
+                            'rel':u'void'
+                         },
+                         {
+                            'href':                        u'https://api.sandbox.paypal.com/v1/payments/authorization/1U302828U8702213S/reauthorize',
+                            'method':u'POST',
+                            'rel':u'reauthorize'
+                         },
+                         {
+                            'href':                        u'https://api.sandbox.paypal.com/v1/payments/payment/PAY-0BV260076T944302DKSKDLJY',
+                            'method':u'GET',
+                            'rel':u'parent_payment'
+                         }
+                      ],
+                      'amount':{
+                         'currency':u'USD',
+                         'total':u'100.00',
+                         'details':{
+                            'subtotal':u'100.00'
+                         }
+                      },
+                      'id':u'1U302828U8702213S',
+                      'state':u'authorized',
+                      'create_time':                  u'2014-12-19T14:26:47                  Z',
+                      'payment_mode':u'INSTANT_TRANSFER',
+                      'parent_payment':u'PAY-0BV260076T944302DKSKDLJY'
+                   }
+                }
+             ]
+          }
+       ],
+       'state':u'approved',
+       'create_time':   u'2014-12-19T14:26:47   Z',
+       'intent':u'authorize',
+       'id':u'PAY-0BV260076T944302DKSKDLJY'
+    }
     """
     payment = paypalrestsdk.Payment({
         "intent": intent,
