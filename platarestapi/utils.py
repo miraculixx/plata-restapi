@@ -27,16 +27,18 @@ api = paypalrestsdk.configure({
     "client_secret": PAYPAL_RESTPAYMENT.get('client_secret')
 })
 
+
 def verify_payment(payment):
     try:
         payment_response = payment.data.get('create').get('response')
         response_type = payment_response.get('response_type', '')
+        print response_type
         if response_type == 'payment':
             payment_id = payment_response.get('response').get('id')
             payment_server = paypalrestsdk.Payment.find(payment_id)
             data = payment.data
-            data["capture"] = {
-            "response": payment_server
+            data["verify"] = {
+                "response": json.loads(json.dumps(str(payment_server)))
             }
             payment.save()
             if payment_server.state != 'approved':
@@ -49,12 +51,17 @@ def verify_payment(payment):
             transaction = payment_server.transactions[0]
             amount_server = transaction.amount.total
             currency_server = transaction.amount.currency
-            sale_state = transaction.related_resources[0].authorization.state
-
+            if transaction.related_resources[0].authorization:
+                sale_state = transaction.related_resources[0].authorization.state
+            else:
+                sale_state = transaction.related_resources[0].sale.state
+            print sale_state
             if (Decimal(amount_server) != Decimal(amount_client)):
                 return False, 'Payment amount does not match order.'
             elif (currency_client != currency_server):
                 return False, 'Payment currency does not match order.'
+            elif sale_state == 'captured':
+                return True, 'Payment has been captured.'
             elif sale_state != 'completed':
                 return False, 'Sale not completed.'
             else:
@@ -69,7 +76,7 @@ def verify_payment(payment):
         return False, 'Payment Not Found'
 
 
-def get_refresh_token(customer_id=None, auth_code=None):
+def get_refresh_token(auth_code=None):
     """Send authorization code after obtaining customer
     consent. Exchange for long living refresh token for
     creating payments in future
@@ -78,8 +85,7 @@ def get_refresh_token(customer_id=None, auth_code=None):
     return refresh_token
 
 
-
-def charge_wallet(transaction, customer_id=None, correlation_id=None, intent="authorize"):
+def charge_wallet(payment, transaction, auth_code=None, correlation_id=None, intent="authorize"):
     """Charge a customer who formerly consented to future payments
     from paypal wallet.
     {
@@ -166,7 +172,7 @@ def charge_wallet(transaction, customer_id=None, correlation_id=None, intent="au
        'id':u'PAY-0BV260076T944302DKSKDLJY'
     }
     """
-    payment = paypalrestsdk.Payment({
+    pp_payment = paypalrestsdk.Payment({
         "intent": intent,
         "payer": {
             "payment_method": "paypal"
@@ -178,87 +184,26 @@ def charge_wallet(transaction, customer_id=None, correlation_id=None, intent="au
                              },
                              "description": transaction["description"]
                          }]})
-
-    refresh_token = get_refresh_token(customer_id)
+    try:
+        refresh_token = get_refresh_token(auth_code)
+        payment.data['refresh_token'] = refresh_token
+        payment.save()
+        print refresh_token
+    except Exception, e:
+        refresh_token = payment.data.get('refresh_token', '')
 
     if not refresh_token:
         return False, "Customer has not granted consent as no refresh token has been found for customer. Authorization code needed to get new refresh token."
 
-    if payment.create(refresh_token, correlation_id):
-        print("Payment %s created successfully" % (payment.id))
-        if payment['intent'] == "authorize":
-            authorization_id = payment['transactions'][0]['related_resources'][0]['authorization']['id']
+    if pp_payment.create(refresh_token, correlation_id):
+        print("Payment %s created successfully" % (pp_payment.id))
+        if pp_payment['intent'] == "authorize":
+            authorization_id = pp_payment['transactions'][0]['related_resources'][0]['authorization']['id']
             print(
                 "Payment %s authorized. Authorization id is %s" % (
-                    payment.id, authorization_id
+                    pp_payment.id, authorization_id
                 )
             )
-        return True, "Charged customer " + customer_id + " " + transaction["amount"]["total"]
+        return pp_payment, "Charged customer " + auth_code + " " + transaction["amount"]["total"]
     else:
         return False, "Error while creating payment:" + str(payment.error)
-
-
-def create_payment():
-    pp = paypalrestsdk.Payment({
-        "intent": "authorize",
-
-        # ###Payer
-        # A resource representing a Payer that funds a payment
-        # Use the List of `FundingInstrument` and the Payment Method
-        # as 'credit_card'
-        "payer": {
-            "payment_method": "credit_card",
-
-            # ###FundingInstrument
-            # A resource representing a Payeer's funding instrument.
-            # Use a Payer ID (A unique identifier of the payer generated
-            # and provided by the facilitator. This is required when
-            # creating or using a tokenized funding instrument)
-            # and the `CreditCardDetails`
-            "funding_instruments": [{
-
-                                        # ###CreditCard
-                                        # A resource representing a credit card that can be
-                                        # used to fund a payment.
-                                        "credit_card": {
-                                            "type": "visa",
-                                            "number": "4417119669820331",
-                                            "expire_month": "11",
-                                            "expire_year": "2018",
-                                            "cvv2": "874",
-                                            "first_name": "Joe",
-                                            "last_name": "Shopper",
-
-                                            # ###Address
-                                            # Base Address used as shipping or billing
-                                            # address in a payment. [Optional]
-                                            "billing_address": {
-                                                "line1": "52 N Main ST",
-                                                "city": "Johnstown",
-                                                "state": "OH",
-                                                "postal_code": "43210",
-                                                "country_code": "US"}}}]},
-        # ###Transaction
-        # A transaction defines the contract of a
-        # payment - what is the payment for and who
-        # is fulfilling it.
-        "transactions": [{
-
-                             # ### ItemList
-                             "item_list": {
-                                 "items": [{
-                                               "name": "item",
-                                               "sku": "item",
-                                               "price": "1.00",
-                                               "currency": "USD",
-                                               "quantity": 1}]},
-
-                             # ###Amount
-                             # Let's you specify a payment amount.
-                             "amount": {
-                                 "total": "1.00",
-                                 "currency": "USD"},
-                             "description": "This is the payment transaction description."}]})
-    if pp.create():
-        return pp
-    return None

@@ -57,17 +57,8 @@ class OrderItemForm(forms.Form):
 	quantity = forms.IntegerField(label=_('quantity'), initial=1,
 		min_value=1, max_value=100)
 
-import paypalrestsdk
-paypalrestsdk.configure({
-		"mode": "sandbox",
-		"client_id": "AaHStRCheAnmoCT2nhk7HUreN70_ERBvO-75hQzmG_MLI98ISEX9iWFmGLzh",
-		"client_secret": "EN3whxCyg-hQeeMxxXlmunXHbno_OtqVpuJpeJFYAbZEbE8xav2ugJvqTMgr"
-})
 def product_detail(request, object_id):
     product = get_object_or_404(Product.objects.filter(is_active=True), pk=object_id)
-    capture = paypalrestsdk.Capture("PAY-09Y60671AN704914NKSBTIAI")
-    print capture
-    print "xxx"
     if request.method == 'POST':
         form = OrderItemForm(request.POST)
 
@@ -79,8 +70,6 @@ def product_detail(request, object_id):
             except ValidationError, e:
              if e.code == 'order_sealed':
                 [messages.error(request, msg) for msg in e.messages]
-            else:
-                raise
 
             return redirect('plata_product_list')
 

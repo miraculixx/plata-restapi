@@ -90,6 +90,7 @@ class OrderResource(ModelResource):
         queryset = Order.objects.all()
         resource_name = 'order'
 
+
 import json
 
 from paypalrestsdk import Capture, ResourceNotFound
@@ -137,13 +138,13 @@ class PaymentResource(ModelResource, PaymentProcessor):
         message = ''
         try:
             result, message = verify_payment(payment)
-        except:
-            pass
+        except Exception, e:
+            print str(e)
         return JsonResponse({"status": "success", "msg": message})
 
-    @action(allowed=['put'], require_loggedin=True)
+    # @action(allowed=['put'], require_loggedin=True)
+    @action(allowed=['put'])
     def capture(self, request, **kwargs):
-        print request
         pk = kwargs['pk']
         payment = OrderPayment.objects.get(pk=pk)
         return self.process_order_confirmed(request, payment.order)
@@ -167,8 +168,8 @@ class PaymentResource(ModelResource, PaymentProcessor):
                 "product_name": "PayPal-Android-SDK",
                 "environment": "sandbox"
             },
-             "response_type": "payment"
-
+         "response_type": "payment"
+        }
 
         {
             "response": {
@@ -181,19 +182,23 @@ class PaymentResource(ModelResource, PaymentProcessor):
                 "environment": "sandbox"
             },
             "response_type": "authorization_code"
-            }
+        }
         android create avd --name Default --target android-19 --abi armeabi-v7a
         '''
-        print bundle.request
         pk = kwargs['pk']
         payment = OrderPayment.objects.get(pk=pk)
         body = json.loads(bundle.request.body)
         data = payment.data
+
         data["create"] = {
             "response": body
         }
-        payment.transaction_id = body.get('response').get('id', '')
+
+        if body.get('response_type') == 'payment':
+            payment.transaction_id = body.get('response').get('id', '')
+
         payment.data = data
+        print payment.data
         payment.save()
         bundle.obj = payment
         return bundle
@@ -205,8 +210,8 @@ class PaymentResource(ModelResource, PaymentProcessor):
         excludes = ['notes', 'status', 'authorized']
         always_return_data = True
         # allowed_methods = ['get']
-    # def hydrate(self, bundle):
-    #     order = Order.objects.get(pk=4)
-    #     bundle.obj.order = order
-    #     bundle.obj.amount = order.total
-    #     return bundle
+        # def hydrate(self, bundle):
+        # order = Order.objects.get(pk=4)
+        #     bundle.obj.order = order
+        #     bundle.obj.amount = order.total
+        #     return bundle
