@@ -48,6 +48,7 @@ INSTALLED_APPS = (
     'plata.product',
     'plata.shop',
     'shop',
+    'platarestapi',
     'tastypie'
 )
 
