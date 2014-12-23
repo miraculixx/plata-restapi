@@ -12,7 +12,7 @@ import platarestapi
 from platarestapi.actions import actionurls, action
 from platarestapi.paypal import PaymentProcessor
 from platarestapi.utils import *
-
+from tastypie.authentication  import ApiKeyAuthentication
 
 class BucketObject(object):
     """
@@ -60,6 +60,7 @@ class CustomPaymentResource(Resource):
     class Meta:
         resource_name = 'payment'
 
+
     def obj_get(self, bundle, **kwargs):
         # bucket = self._bucket()
         pk = kwargs['pk']
@@ -96,6 +97,12 @@ from paypalrestsdk import Capture, ResourceNotFound
 
 
 class PaymentResource(ModelResource, PaymentProcessor):
+    '''
+    python manage.py syncdb to create new table for ApiKeyAuthentication
+    ?username=admin&api_key=53bf26edd8fc0252db480c746cfe995e1facb928
+    Or 
+    Authorization: ApiKey admin:53bf26edd8fc0252db480c746cfe995e1facb928
+    '''
     # order = fields.ForeignKey(OrderResource, 'order')
     def obj_create(self, bundle, **kwargs):
         """
@@ -189,6 +196,7 @@ class PaymentResource(ModelResource, PaymentProcessor):
         queryset = OrderPayment.objects.all()
         resource_name = 'payment'
         authorization = Authorization()
+        authentication = ApiKeyAuthentication()
         excludes = ['notes', 'status', 'authorized']
         always_return_data = True
         # allowed_methods = ['get']
