@@ -28,7 +28,7 @@ api = paypalrestsdk.configure({
 })
 
 
-def verify_payment(payment):
+def verify_payment(payment, user=None):
     try:
         payment_response = payment.data.get('create').get('response')
         response_type = payment_response.get('response_type', '')
@@ -76,16 +76,25 @@ def verify_payment(payment):
         return False, 'Payment Not Found'
 
 
-def get_refresh_token(auth_code=None):
+def get_refresh_token(auth_code=None, user=None):
     """Send authorization code after obtaining customer
     consent. Exchange for long living refresh token for
     creating payments in future
     """
-    refresh_token = api.get_refresh_token(auth_code)
+    if PaymentAuthorization.objects.filter(user=user):
+        paymentauthorization = PaymentAuthorization.objects.filter(user=user).first()
+        refresh_token = paymentauthorization.refresh_token
+    else:    
+        refresh_token = api.get_refresh_token(auth_code)
+        paymentauthorization = PaymentAuthorization(user=user)
+        paymentauthorization.access_token = auth_code
+        paymentauthorization.refresh_token = refresh_token
+        paymentauthorization.save()
+
     return refresh_token
 
 
-def charge_wallet(payment, transaction, auth_code=None, correlation_id=None, intent="authorize"):
+def charge_wallet(payment, transaction, auth_code=None, correlation_id=None, intent="authorize", user=None):
     """Charge a customer who formerly consented to future payments
     from paypal wallet.
     {
@@ -185,7 +194,7 @@ def charge_wallet(payment, transaction, auth_code=None, correlation_id=None, int
                              "description": transaction["description"]
                          }]})
     try:
-        refresh_token = get_refresh_token(auth_code)
+        refresh_token = get_refresh_token(auth_code, user)
         payment.data['refresh_token'] = refresh_token
         payment.save()
         print refresh_token

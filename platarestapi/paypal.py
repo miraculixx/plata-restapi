@@ -59,7 +59,7 @@ class PaymentProcessor(ProcessorBase):
                                             transaction=transaction,
                                             auth_code=payment.data.get('create').get('response').get('response').get(
                                                 'code'),
-                                            correlation_id=order.email, intent='sale'
+                                            correlation_id=order.email, intent='sale', user=request.user
             )
         print result, message
         if not order.balance_remaining:

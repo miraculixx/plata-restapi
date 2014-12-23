@@ -144,7 +144,7 @@ class PaymentResource(ModelResource, PaymentProcessor):
         payment = OrderPayment.objects.get(pk=pk)
         message = ''
         try:
-            result, message = verify_payment(payment)
+            result, message = verify_payment(payment, user=request.user)
         except Exception, e:
             print str(e)
         return JsonResponse({"status": "success", "msg": message})
