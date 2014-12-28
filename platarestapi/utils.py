@@ -4,6 +4,7 @@ from django.http import HttpResponse
 import paypalrestsdk
 from conf.settings import PAYPAL_RESTPAYMENT
 import logging
+from platarestapi.models import PaymentAuthorization
 
 
 class JsonResponse(HttpResponse):
@@ -29,72 +30,140 @@ api = paypalrestsdk.configure({
 
 
 def verify_payment(payment, user=None):
+    '''
+
+    {
+       'update_time':   u'2014-12-28T17:05:30   Z',
+       'links':[
+          {
+             'href':         u'https://api.sandbox.paypal.com/v1/payments/payment/PAY-90538524N94629032KSQDQWQ',
+             'method':u'GET',
+             'rel':u'self'
+          }
+       ],
+       'payer':{
+          'payment_method':u'paypal',
+          'status':u'VERIFIED',
+          'payer_info':{
+             'first_name':u'SandboxTest',
+             'last_name':u'Account',
+             'email':u'huy@mac.com',
+             'payer_id':u'H7ZBSNRZ5C7DL'
+          }
+       },
+       'transactions':[
+          {
+             'amount':{
+                'currency':u'USD',
+                'total':u'500.00',
+                'details':{
+                   'subtotal':u'500.00'
+                }
+             },
+             'related_resources':[
+                {
+                   'sale':{
+                      'protection_eligibility':u'ELIGIBLE',
+                      'update_time':                  u'2014-12-28T17:05:30                  Z',
+                      'links':[
+                         {
+                            'href':                        u'https://api.sandbox.paypal.com/v1/payments/sale/88D15839HW0053230',
+                            'method':u'GET',
+                            'rel':u'self'
+                         },
+                         {
+                            'href':                        u'https://api.sandbox.paypal.com/v1/payments/sale/88D15839HW0053230/refund',
+                            'method':u'POST',
+                            'rel':u'refund'
+                         },
+                         {
+                            'href':                        u'https://api.sandbox.paypal.com/v1/payments/payment/PAY-90538524N94629032KSQDQWQ',
+                            'method':u'GET',
+                            'rel':u'parent_payment'
+                         }
+                      ],
+                      'protection_eligibility_type':u'ITEM_NOT_RECEIVED_ELIGIBLE,
+                      UNAUTHORIZED_PAYMENT_ELIGIBLE',
+                      'amount':{
+                         'currency':u'USD',
+                         'total':u'500.00'
+                      },
+                      'id':u'88D15839HW0053230',
+                      'state':u'completed',
+                      'create_time':                  u'2014-12-28T17:05:30                  Z',
+                      'payment_mode':u'INSTANT_TRANSFER',
+                      'parent_payment':u'PAY-90538524N94629032KSQDQWQ'
+                   }
+                }
+             ]
+          }
+       ],
+       'state':u'approved',
+       'create_time':   u'2014-12-28T17:05:30   Z',
+       'intent':u'sale',
+       'id':u'PAY-90538524N94629032KSQDQWQ'
+    }
+    '''
     try:
-        payment_response = payment.data.get('create').get('response')
-        response_type = payment_response.get('response_type', '')
-        print response_type
-        if response_type == 'payment':
-            payment_id = payment_response.get('response').get('id')
-            payment_server = paypalrestsdk.Payment.find(payment_id)
-            data = payment.data
-            data["verify"] = {
-                "response": json.loads(json.dumps(str(payment_server)))
-            }
-            payment.save()
-            if payment_server.state != 'approved':
-                return False, 'Payment has not been approved yet. Status is ' + payment_server.state + '.'
+        import ast
+        payment_response = ast.literal_eval(payment.data['capture']['response'])
+        print type(payment_response)
+        payment_id = payment_response['id']
+        print payment_id
+        payment_server = paypalrestsdk.Payment.find(payment_id)
+        data = payment.data
+        data["verify"] = {
+            "response": json.loads(json.dumps(str(payment_server)))
+        }
+        payment.save()
+        if payment_server.state != 'approved':
+            return False, 'Payment has not been approved yet. Status is ' + payment_server.state + '.'
 
-            amount_client = payment.amount
-            currency_client = payment.currency
+        amount_client = payment.amount
+        currency_client = payment.currency
 
-            # Get most recent transaction
-            transaction = payment_server.transactions[0]
-            amount_server = transaction.amount.total
-            currency_server = transaction.amount.currency
-            if transaction.related_resources[0].authorization:
-                sale_state = transaction.related_resources[0].authorization.state
-            else:
-                sale_state = transaction.related_resources[0].sale.state
-            print sale_state
-            if (Decimal(amount_server) != Decimal(amount_client)):
-                return False, 'Payment amount does not match order.'
-            elif (currency_client != currency_server):
-                return False, 'Payment currency does not match order.'
-            elif sale_state == 'captured':
-                return True, 'Payment has been captured.'
-            elif sale_state != 'completed':
-                return False, 'Sale not completed.'
-            else:
-                return True, 'Payment has been authorized.'
-        elif response_type == 'authorization_code':
-            return True, 'Received consent'
-
+        # Get most recent transaction
+        transaction = payment_server.transactions[0]
+        amount_server = transaction.amount.total
+        currency_server = transaction.amount.currency
+        if transaction.related_resources[0].authorization:
+            sale_state = transaction.related_resources[0].authorization.state
         else:
-            return False, 'Invalid response type'
+            sale_state = transaction.related_resources[0].sale.state
+        print sale_state
+        if (Decimal(amount_server) != Decimal(amount_client)):
+            return False, 'Payment amount does not match order.'
+        elif (currency_client != currency_server):
+            return False, 'Payment currency does not match order.'
+        elif sale_state == 'captured':
+            return True, 'Payment has been captured.'
+        elif sale_state != 'completed':
+            return False, 'Sale not completed.'
+        else:
+            return True, 'Payment has been authorized.'
+        # elif response_type == 'authorization_code':
+        #     return True, 'Received consent'
+        #
+        # else:
+        #     return False, 'Invalid response type'
 
     except paypalrestsdk.ResourceNotFound:
         return False, 'Payment Not Found'
 
 
-def get_refresh_token(auth_code=None, user=None):
+def get_refresh_token(user=None):
     """Send authorization code after obtaining customer
     consent. Exchange for long living refresh token for
     creating payments in future
     """
+    refresh_token = None
     if PaymentAuthorization.objects.filter(user=user):
-        paymentauthorization = PaymentAuthorization.objects.filter(user=user).first()
-        refresh_token = paymentauthorization.refresh_token
-    else:    
-        refresh_token = api.get_refresh_token(auth_code)
-        paymentauthorization = PaymentAuthorization(user=user)
-        paymentauthorization.access_token = auth_code
-        paymentauthorization.refresh_token = refresh_token
-        paymentauthorization.save()
-
+        payment_authorization = PaymentAuthorization.objects.filter(user=user).first()
+        refresh_token = payment_authorization.refresh_token
     return refresh_token
 
 
-def charge_wallet(payment, transaction, auth_code=None, correlation_id=None, intent="authorize", user=None):
+def charge_wallet(payment, transaction, correlation_id=None, intent="authorize", user=None):
     """Charge a customer who formerly consented to future payments
     from paypal wallet.
     {
@@ -193,13 +262,7 @@ def charge_wallet(payment, transaction, auth_code=None, correlation_id=None, int
                              },
                              "description": transaction["description"]
                          }]})
-    try:
-        refresh_token = get_refresh_token(auth_code, user)
-        payment.data['refresh_token'] = refresh_token
-        payment.save()
-        print refresh_token
-    except Exception, e:
-        refresh_token = payment.data.get('refresh_token', '')
+    refresh_token = get_refresh_token(user)
 
     if not refresh_token:
         return False, "Customer has not granted consent as no refresh token has been found for customer. Authorization code needed to get new refresh token."
@@ -213,6 +276,6 @@ def charge_wallet(payment, transaction, auth_code=None, correlation_id=None, int
                     pp_payment.id, authorization_id
                 )
             )
-        return pp_payment, "Charged customer " + auth_code + " " + transaction["amount"]["total"]
+        return pp_payment, "Charged customer " + user.username + " " + transaction["amount"]["total"]
     else:
         return False, "Error while creating payment:" + str(payment.error)

@@ -1,5 +1,7 @@
 from django.http import HttpResponse
 import paypalrestsdk
+from plata.payment.modules.base import ProcessorBase
+import tastypie
 from tastypie.authorization import Authorization
 from tastypie.bundle import Bundle
 from tastypie.resources import Resource, ModelResource
@@ -10,9 +12,10 @@ from tastypie.resources import Resource
 from tastypie import fields
 import platarestapi
 from platarestapi.actions import actionurls, action
-from platarestapi.paypal import PaymentProcessor
+from platarestapi.paypal import *
 from platarestapi.utils import *
-from tastypie.authentication  import ApiKeyAuthentication
+from tastypie.authentication import ApiKeyAuthentication
+
 
 class BucketObject(object):
     """
@@ -140,6 +143,9 @@ class PaymentResource(ModelResource, PaymentProcessor):
 
     @action(name='verify', allowed=['get'])
     def verify(self, request, **kwargs):
+        '''
+        /api/v1/payment/1/verify/?username=admin&api_key=53bf26edd8fc0252db480c746cfe995e1facb928
+        '''
         pk = kwargs['pk']
         payment = OrderPayment.objects.get(pk=pk)
         message = ''
@@ -152,16 +158,61 @@ class PaymentResource(ModelResource, PaymentProcessor):
     # @action(allowed=['put'], require_loggedin=True)
     @action(allowed=['put'])
     def capture(self, request, **kwargs):
+        '''
+        /api/v1/payment/1/capture/?username=admin&api_key=53bf26edd8fc0252db480c746cfe995e1facb928
+        '''
         pk = kwargs['pk']
         payment = OrderPayment.objects.get(pk=pk)
         return self.process_order_confirmed(request, payment.order)
 
-    @action(allowed=['post'], static=True)
+    @action(allowed=['post'])
     def approval(self, request, **kwargs):
-        pass
+        '''
+        /api/v1/payment/1/approval/?username=admin&api_key=53bf26edd8fc0252db480c746cfe995e1facb928
+        {
+            "response": {
+                "code": "EGZU4qcUF7hBLSzo4toZ5QlKwNR7dXbookRNvVhATn_l-EJNj1b3naxqZBbryG4F3ujWqf3a7TmM-bfA1v21S9Vptnj_VYV51FJTEZtCn0E-ZF2YgKeYmyw60W8d1xAePUt4c0zbYhRrSRiDgdnoQJ4"
+            },
+            "client": {
+                "platform": "Android",
+                "paypal_sdk_version": "2.7.1",
+                "product_name": "PayPal-Android-SDK",
+                "environment": "sandbox"
+            },
+            "response_type": "authorization_code"
+        }
+        '''
+        user = request.user
+        body = json.loads(request.body)
+        auth_code = body['response']['code']
+        print auth_code
+        try:
+
+            refresh_token = api.get_refresh_token(auth_code)
+            print refresh_token
+        except Exception, e:
+            print str(e)
+            return JsonResponse({"status": "fail", "msg": str(e)})
+        print user
+        user = User.objects.get(username=request.GET.get('username'))
+        if PaymentAuthorization.objects.filter(user=user):
+            payment_authorization = PaymentAuthorization.objects.filter(user=user).first()
+            payment_authorization.access_token = auth_code
+            payment_authorization.refresh_token = refresh_token
+            payment_authorization.save()
+            print payment_authorization
+        else:
+            payment_authorization = PaymentAuthorization(user=user)
+            payment_authorization.access_token = auth_code
+
+            payment_authorization.refresh_token = refresh_token
+            payment_authorization.save()
+            print payment_authorization
+        return JsonResponse({"status": "success", "auth_code": auth_code})
 
     def obj_update(self, bundle, skip_errors=False, **kwargs):
         '''
+        /api/v1/payment/1/?username=admin&api_key=53bf26edd8fc0252db480c746cfe995e1facb928
         {
             "response": {
                 "state": "approved",
@@ -178,18 +229,7 @@ class PaymentResource(ModelResource, PaymentProcessor):
          "response_type": "payment"
         }
 
-        {
-            "response": {
-                "code": "EGZU4qcUF7hBLSzo4toZ5QlKwNR7dXbookRNvVhATn_l-EJNj1b3naxqZBbryG4F3ujWqf3a7TmM-bfA1v21S9Vptnj_VYV51FJTEZtCn0E-ZF2YgKeYmyw60W8d1xAePUt4c0zbYhRrSRiDgdnoQJ4"
-            },
-            "client": {
-                "platform": "Android",
-                "paypal_sdk_version": "2.7.1",
-                "product_name": "PayPal-Android-SDK",
-                "environment": "sandbox"
-            },
-            "response_type": "authorization_code"
-        }
+
         android create avd --name Default --target android-19 --abi armeabi-v7a
         '''
         pk = kwargs['pk']
@@ -205,7 +245,6 @@ class PaymentResource(ModelResource, PaymentProcessor):
             payment.transaction_id = body.get('response').get('id', '')
 
         payment.data = data
-        print payment.data
         payment.save()
         bundle.obj = payment
         return bundle
@@ -213,13 +252,7 @@ class PaymentResource(ModelResource, PaymentProcessor):
     class Meta:
         queryset = OrderPayment.objects.all()
         resource_name = 'payment'
-        authorization = Authorization()
+        authorization = tastypie.authorization.Authorization()
         authentication = ApiKeyAuthentication()
         excludes = ['notes', 'status', 'authorized']
         always_return_data = True
-        # allowed_methods = ['get']
-        # def hydrate(self, bundle):
-        # order = Order.objects.get(pk=4)
-        #     bundle.obj.order = order
-        #     bundle.obj.amount = order.total
-        #     return bundle

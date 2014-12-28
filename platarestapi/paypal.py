@@ -3,6 +3,7 @@ import logging
 import urllib2
 
 from django.conf import settings
+from django.contrib.auth.models import User
 from django.http import HttpResponse, HttpResponseForbidden
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -40,11 +41,16 @@ class PaymentProcessor(ProcessorBase):
             },
             "description": payment.notes
         }
-
-        response_type = payment.data.get('create').get('response').get('response_type')
+        response_type = 'authorization_code'
+        try:
+            response_type = payment.data.get('create').get('response').get('response_type')
+        except:
+            pass
         if response_type == 'payment':
-            authorization = Authorization.find(
-                payment.data.get('create').get('response').get('response').get('authorization_id'))
+            payment_id=payment.data.get('create').get('response').get('response').get('authorization_id')
+            print payment_id
+            authorization = Authorization.find(payment_id)
+            print authorization
             if authorization.state == 'captured':
                 return JsonResponse({"payment_id": payment.id, "msg": "This payment was captured"})
             capture = authorization.capture({
@@ -52,16 +58,14 @@ class PaymentProcessor(ProcessorBase):
                     "currency": payment.currency,
                     "total": str(payment.amount)},
                 "is_final_capture": True})
-
+            print capture
             result, message = capture, capture.success()
         else:
+            user = User.objects.get(username=request.GET.get('username'))
             result, message = charge_wallet(payment,
                                             transaction=transaction,
-                                            auth_code=payment.data.get('create').get('response').get('response').get(
-                                                'code'),
-                                            correlation_id=order.email, intent='sale', user=request.user
+                                            correlation_id=order.email, intent='sale', user=user
             )
-        print result, message
         if not order.balance_remaining:
             return self.already_paid(order)
         logger.info('Processing order %s using Paypal' % order)
