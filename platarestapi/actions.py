@@ -49,8 +49,10 @@ def action(name=None,
            url=None):
     def wrap(method):
         def wrapped_f(self, request, *args, **kwargs):
-
+            
             self.method_check(request, allowed=allowed)
+            self.is_authenticated(request)
+            self.throttle_check(request)
 
             if require_loggedin is True:
                 if not (request.user and request.user.is_authenticated()):
@@ -58,6 +60,8 @@ def action(name=None,
                         "User must be logged in to perform this opperation")
 
             res = method(self, request, *args, **kwargs)
+            
+            self.log_throttled_access(request)
             return res
 
         wrapped_f.is_auto_action = True

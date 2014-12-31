@@ -61,7 +61,7 @@ class PaymentProcessor(ProcessorBase):
             print capture
             result, message = capture, capture.success()
         else:
-            user = User.objects.get(username=request.GET.get('username'))
+            user = request.user
             result, message = charge_wallet(payment,
                                             transaction=transaction,
                                             correlation_id=order.email, intent='sale', user=user

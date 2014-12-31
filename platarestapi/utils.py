@@ -140,7 +140,7 @@ def verify_payment(payment, user=None):
         elif sale_state != 'completed':
             return False, 'Sale not completed.'
         else:
-            return True, 'Payment has been authorized.'
+            return False, 'Unknown state'
         # elif response_type == 'authorization_code':
         #     return True, 'Received consent'
         #

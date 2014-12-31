@@ -14,7 +14,7 @@ import platarestapi
 from platarestapi.actions import actionurls, action
 from platarestapi.paypal import *
 from platarestapi.utils import *
-from tastypie.authentication import ApiKeyAuthentication
+from tastypie.authentication import ApiKeyAuthentication, BasicAuthentication
 
 
 class BucketObject(object):
@@ -152,7 +152,7 @@ class PaymentResource(ModelResource, PaymentProcessor):
         try:
             result, message = verify_payment(payment, user=request.user)
         except Exception, e:
-            print str(e)
+            message = e
         return JsonResponse({"status": "success", "msg": message})
 
     # @action(allowed=['put'], require_loggedin=True)
@@ -163,6 +163,7 @@ class PaymentResource(ModelResource, PaymentProcessor):
         '''
         pk = kwargs['pk']
         payment = OrderPayment.objects.get(pk=pk)
+        print request.user
         return self.process_order_confirmed(request, payment.order)
 
     @action(allowed=['post'])
