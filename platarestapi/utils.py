@@ -106,8 +106,8 @@ def verify_payment(payment, user=None):
     '''
     try:
         import ast
-        payment_response = ast.literal_eval(payment.data['capture']['response'])
-        print type(payment_response)
+        payment_response = payment.data.get('capture').get('authorization').get('response')
+        print payment_response
         payment_id = payment_response['id']
         print payment_id
         payment_server = paypalrestsdk.Payment.find(payment_id)
