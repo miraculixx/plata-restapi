@@ -180,14 +180,16 @@ class PaymentResource(ModelResource):
         pk = kwargs['pk']
         payment = OrderPayment.objects.get(pk=pk)
         message = ''
+        result = False
         try:
-            if payment.data.get('capture'):
+            if payment.data.get('capture').get('authorization', ''):
+                print payment
                 result, message = verify_payment(payment, user=request.user)
             else:
                 return JsonResponse({"status": "failed", "msg": "need paypal authorization to verify the payment"}, 400)
         except Exception, e:
             return JsonResponse({"status": "failed", "msg": str(e)})
-        return JsonResponse({"status": "success", "msg": message})
+        return JsonResponse({"status": "success" if result else "failed", "msg": message})
 
     # @action(allowed=['put'], require_loggedin=True)
     @action(allowed=['post'])
