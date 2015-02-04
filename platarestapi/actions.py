@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 from django.conf.urls import url
+from django.contrib.auth.models import User
 from tastypie.exceptions import Unauthorized
 from tastypie.utils import trailing_slash
 
@@ -53,6 +54,32 @@ def action(name=None,
             self.method_check(request, allowed=allowed)
 
             if require_loggedin is True:
+                if request.META.get('HTTP_AUTHORIZATION') and request.META['HTTP_AUTHORIZATION'].lower().startswith(
+                        'apikey '):
+                    (auth_type, data) = request.META['HTTP_AUTHORIZATION'].split()
+
+                    if auth_type.lower() != 'apikey':
+                        raise ValueError("Incorrect authorization header.")
+
+                    username, api_key = data.split(':', 1)
+                else:
+                    username = request.GET.get('username') or request.POST.get('username')
+                    api_key = request.GET.get('api_key') or request.POST.get('api_key')
+                try:
+                    lookup_kwargs = {'username': username}
+                    user = User.objects.get(**lookup_kwargs)
+                    from tastypie.models import ApiKey
+
+                    try:
+                        ApiKey.objects.get(user=user, key=api_key)
+                        request.user = user
+                    except ApiKey.DoesNotExist:
+                        raise Unauthorized(
+                            "User must be logged in to perform this opperation")
+                except (User.DoesNotExist, User.MultipleObjectsReturned):
+                    raise Unauthorized(
+                        "User must be logged in to perform this opperation")
+
                 if not (request.user and request.user.is_authenticated()):
                     raise Unauthorized(
                         "User must be logged in to perform this opperation")

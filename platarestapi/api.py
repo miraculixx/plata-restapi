@@ -192,7 +192,7 @@ class PaymentResource(ModelResource):
         return JsonResponse({"status": "success" if result else "failed", "msg": message})
 
     # @action(allowed=['put'], require_loggedin=True)
-    @action(allowed=['post'])
+    @action(allowed=['post'], require_loggedin=True)
     def capture(self, request, **kwargs):
         '''
         /api/v1/payment/1/capture/?username=admin&api_key=53bf26edd8fc0252db480c746cfe995e1facb928
@@ -205,7 +205,7 @@ class PaymentResource(ModelResource):
         future_payment = FuturePaymentProcessor(1)
         return future_payment.process_order_confirmed(request, payment.order)
 
-    @action(allowed=['post'])
+    @action(allowed=['post'], require_loggedin=True)
     def approval(self, request, **kwargs):
         '''
         /api/v1/payment/1/approval/?username=admin&api_key=53bf26edd8fc0252db480c746cfe995e1facb928
