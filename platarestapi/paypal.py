@@ -100,7 +100,7 @@ class FuturePaymentProcessor(ProcessorBase):
 
         correlation_id = request.GET.get('correlation_id', '')
 
-        user = User.objects.get(username=request.GET.get('username'))
+        user = request.user
         result, message = charge_wallet(payment,
                                         transaction=transaction,
                                         correlation_id=correlation_id, intent='sale', user=user
@@ -162,7 +162,7 @@ class PaymentProcessor(ProcessorBase):
             print capture
             result, message = capture, capture.success()
         else:
-            user = User.objects.get(username=request.GET.get('username'))
+            user = request.user
             result, message = charge_wallet(payment,
                                             transaction=transaction,
                                             correlation_id=order.email, intent='sale', user=user

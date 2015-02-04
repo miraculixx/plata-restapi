@@ -233,8 +233,6 @@ class PaymentResource(ModelResource):
         except Exception, e:
             print str(e)
             return JsonResponse({"status": "fail", "msg": str(e)})
-        print user
-        user = User.objects.get(username=request.GET.get('username'))
         if PaymentAuthorization.objects.filter(user=user):
             payment_authorization = PaymentAuthorization.objects.filter(user=user).first()
             payment_authorization.access_token = auth_code
