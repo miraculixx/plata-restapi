@@ -1,92 +1,16 @@
-from django.http import HttpResponse
-import paypalrestsdk
-from plata.payment.modules.base import ProcessorBase
-import tastypie
-from tastypie.authorization import Authorization, DjangoAuthorization
-from tastypie.bundle import Bundle
-from tastypie.resources import Resource, ModelResource
-from tastypie import fields
-from plata.shop.models import *
-from django.contrib.auth.models import User
-from tastypie.resources import Resource
-from tastypie import fields
-import platarestapi
+
+import json
+
+from plata.shop.models import Order, OrderPayment
+from tastypie.authentication import ApiKeyAuthentication
+from tastypie.authorization import DjangoAuthorization
+from tastypie.resources import ModelResource
+
 from platarestapi.actions import actionurls, action
-from platarestapi.paypal import *
-from platarestapi.utils import *
-from tastypie.authentication import ApiKeyAuthentication, BasicAuthentication, MultiAuthentication
-
-
-class BucketObject(object):
-    """
-    Container to keep data that doesn't conform to any orm model, but has to be returned
-    by some resources.
-    """
-
-    def __init__(self, initial=None):
-        self.__dict__['_data'] = {}
-
-        if hasattr(initial, 'items'):
-            self.__dict__['_data'] = initial
-
-    def __getattr__(self, name):
-        return self._data.get(name, None)
-
-    def __setattr__(self, name, value):
-        self.__dict__['_data'][name] = value
-
-    def to_dict(self):
-        return self._data
-
-
-class dict2obj(object):
-    """
-    Convert dictionary to object
-    @source http://stackoverflow.com/a/1305561/383912
-    """
-
-    def __init__(self, d):
-        self.__dict__['d'] = d
-
-    def __getattr__(self, key):
-        value = self.__dict__['d'][key]
-        if type(value) == type({}):
-            return dict2obj(value)
-
-        return value
-
-
-class CustomPaymentResource(Resource):
-    id = fields.IntegerField(attribute='id')
-    data = fields.CharField(attribute='data')
-
-    class Meta:
-        resource_name = 'payment'
-
-
-    def obj_get(self, bundle, **kwargs):
-        # bucket = self._bucket()
-        pk = kwargs['pk']
-        print kwargs['pk']
-        return OrderPayment.objects.get(pk=int(pk))
-
-    def obj_get_list(self, request=None, **kwargs):
-        payments = []
-        # your actual logic to retrieve contents from external source.
-
-        # example
-        payments.append(dict2obj(
-            {
-                'id': 1
-            }
-        ))
-        payments.append(dict2obj(
-            {
-                'id': 2
-            }
-        ))
-
-        return payments
+from platarestapi.models import PaymentAuthorization
+from platarestapi.utils import JsonResponse, ShopUtil, api
+from tastypie.exceptions import BadRequest
+from platarestapi.processor.paypal.mixin import PaypalConstants
 
 
 class OrderResource(ModelResource):
@@ -95,12 +19,10 @@ class OrderResource(ModelResource):
         resource_name = 'order'
 
 
-import json
-
-from paypalrestsdk import Capture, ResourceNotFound
-
-
 class PaymentResource(ModelResource):
+    def prepend_urls(self):
+        return actionurls(self)
+
     '''
     python manage.py syncdb to create new table for ApiKeyAuthentication
     ?username=admin&api_key=53bf26edd8fc0252db480c746cfe995e1facb928
@@ -110,28 +32,23 @@ class PaymentResource(ModelResource):
     # order = fields.ForeignKey(OrderResource, 'order')
     def obj_create(self, bundle, **kwargs):
         """
-
-        {
-            "order_id": 5,
-            "authorization": {
-                        "response": {
-                            "state": "approved",
-                            "id": "PAY-8XS49767G4008033KKSJQG6Y",
-                            "create_time": "2014-12-18T16:40:27Z",
-                            "intent": "sale"
-                        },
-                        "client": {
-                            "platform": "Android",
-                            "paypal_sdk_version": "2.7.1",
-                            "product_name": "PayPal-Android-SDK",
-                            "environment": "sandbox"
-                        },
-                     "response_type": "payment"
-                    },
-            "method": "paypal-rest-single"
-            }
-
-
+        Create a payment
+        
+        This creates a pending payment in the shop system. It does not, however
+        create a payment at the payment provider. The method parameter is any
+        of the available payment modules:
+        
+        paypalrestapi-single -- for single payments
+        paypalrestapi-future -- for future payments
+        
+        1. Retrieve processor for the given method
+        2. Execute processor.process_order_confirmed method
+        3. Prepare response
+        
+        :param order_id: the shop order id this payment refers to
+        :param method: the payment method (processor) to use
+        :param authorization: the payment provider's authorization data for
+        this payment
         :return:
         {
             "amount": "500.00",
@@ -147,49 +64,75 @@ class PaymentResource(ModelResource):
             "transaction_id": ""
         }
         """
-        print bundle.request.body
-        print json.loads(bundle.request.body)
-        data = json.loads(bundle.request.body)
-        order_id = data.get("order_id")
-        method = data.get("method")
-        authorization = data.get("authorization")
+        # get parameters
+        order_id = bundle.data.get('order_id')
+        method = bundle.data.get("method")
+        authorization = bundle.data.get("authorization")
         order = Order.objects.get(pk=order_id)
-        if method == 'paypal-rest-single':
-
-            single_payment = SinglePaymentProcessor(1)
-            new_payment = single_payment.create_pending_payment(order)
-            new_payment.data['capture'] = {'order_id' : order_id , 'authorization' : authorization , 'method' : 'paypal-rest-single'}
-            new_payment.save()
+        # start processing
+        try:
+            processor = self.shoputil.get_payment_processor(method)
+        except:
+            raise BadRequest('invalid payment method %s' % method)
         else:
-            future_payment = FuturePaymentProcessor(1)
-            new_payment = future_payment.create_pending_payment(order)
-            new_payment.data['capture'] = {'order_id' : order_id , 'authorization' : authorization , 'method' : 'paypal-rest-future'}
-            new_payment.save()
-        bundle.obj = new_payment
+            # create a pending order and return order data
+            resp = processor.process_order_confirmed(bundle.request, 
+                                  order, order_id, authorization)
+            bundle.data = resp
+            bundle.obj = processor.get_or_create_pending_payment(order)
         return bundle
-
-
-    def prepend_urls(self):
-        return actionurls(self)
+    
+    def obj_update(self, bundle, skip_errors=False, **kwargs):
+        '''
+        update a payment with authorization data
+        
+        this is the same as calling POST with the authorization parameter.
+        Authorization data is required to process capture or verify actions.  
+        
+        :param pk: primary key of Paypal payment
+        :param body: the authorization data 
+        '''
+        pk = kwargs['pk']
+        payment = OrderPayment.objects.get(pk=pk)
+        try:
+            processor = self.shoputil.get_processor_by_payment(payment)
+        except:
+            raise BadRequest('invalid payment method %s' % 
+                             payment.payment_module_key)
+        # update payment with authorization data 
+        authorization = bundle.data.get('authorization')
+        resp = processor.process_order_confirmed(bundle.request, 
+                                  payment.order, payment.order.id, authorization)
+        bundle.data = resp
+        # reload payment data as processed
+        bundle.obj = OrderPayment.objects.get(pk=payment.pk)
+        return bundle
 
     @action(name='verify', allowed=['get'], require_loggedin=True)
     def verify(self, request, **kwargs):
         '''
-        /api/v1/payment/1/verify/?username=admin&api_key=53bf26edd8fc0252db480c746cfe995e1facb928
+        verify a payment
+        
+        this returns success if the payment has been approved and
+        transactions have been completed. Otherwise returns failed.
         '''
-        pk = kwargs['pk']
+        pk = int(kwargs['pk'])
         payment = OrderPayment.objects.get(pk=pk)
+        processor = self.shoputil.get_processor_by_payment(payment)
         message = ''
         result = False
         try:
-            if payment.data.get('capture').get('authorization', ''):
-                print payment
-                result, message = verify_payment(payment, user=request.user)
+            if payment.data.get('capture').get('authorization'):
+                result, message = processor.verify_payment(payment, 
+                                PaypalConstants.APPROVED, 
+                                PaypalConstants.COMPLETED, user=request.user)
             else:
-                return JsonResponse({"status": "failed", "msg": "need paypal authorization to verify the payment"}, 400)
+                return JsonResponse({"status": "failed", "msg": ("need paypal "
+                            "authorization to verify the payment")}, status=400)
         except Exception, e:
-            return JsonResponse({"status": "failed", "msg": str(e)})
-        return JsonResponse({"status": "success" if result else "failed", "msg": message})
+            return JsonResponse({"status": "failed", "msg": str(e)}, status=400)
+        return JsonResponse({"status": "success" if result 
+                             else "failed", "msg": message})
 
     # @action(allowed=['put'], require_loggedin=True)
     @action(allowed=['post'], require_loggedin=True)
@@ -202,8 +145,8 @@ class PaymentResource(ModelResource):
         '''
         pk = kwargs['pk']
         payment = OrderPayment.objects.get(pk=pk)
-        future_payment = FuturePaymentProcessor(1)
-        return future_payment.process_order_confirmed(request, payment.order)
+        processor = self.shoputil.get_processor_by_payment(payment)
+        return processor.process_order_confirmed(request, payment.order)
 
     @action(allowed=['post'], require_loggedin=True)
     def approval(self, request, **kwargs):
@@ -248,46 +191,20 @@ class PaymentResource(ModelResource):
             print payment_authorization
         return JsonResponse({"status": "success", "auth_code": auth_code})
 
-    def obj_update(self, bundle, skip_errors=False, **kwargs):
-        '''
-        /api/v1/payment/1/?username=admin&api_key=53bf26edd8fc0252db480c746cfe995e1facb928
-        {
-            "response": {
-                "state": "approved",
-                "id": "PAY-8XS49767G4008033KKSJQG6Y",
-                "create_time": "2014-12-18T16:40:27Z",
-                "intent": "sale"
-            },
-            "client": {
-                "platform": "Android",
-                "paypal_sdk_version": "2.7.1",
-                "product_name": "PayPal-Android-SDK",
-                "environment": "sandbox"
-            },
-         "response_type": "payment"
-        }
-
-
-        android create avd --name Default --target android-19 --abi armeabi-v7a
-        '''
-        pk = kwargs['pk']
-        payment = OrderPayment.objects.get(pk=pk)
-        body = json.loads(bundle.request.body)
-        data = payment.data
-
-        data['capture'] = {'order_id' : payment.order.id , 'authorization' : body , 'method' : 'paypal-rest-single'}
-        if body.get('response_type') == 'payment':
-            payment.transaction_id = body.get('response').get('id', '')
-
-        payment.data = data
-        payment.save()
-        bundle.obj = payment
-        return bundle
+        
+    @property
+    def shoputil(self):
+        return ShopUtil()
+    
+    @property
+    def shop(self):
+        return self.shoputil
+    
 
     class Meta:
         queryset = OrderPayment.objects.all()
         resource_name = 'payment'
         authorization = DjangoAuthorization()
         authentication = ApiKeyAuthentication()
-        excludes = ['notes', 'status', 'authorized']
+        excludes = ['authorized', 'data',]
         always_return_data = True

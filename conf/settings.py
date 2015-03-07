@@ -110,8 +110,8 @@ STATIC_URL = '/static/'
 
 PAYPAL_RESTPAYMENT = {
     'mode': 'sandbox',
-    'client_id': 'AaHStRCheAnmoCT2nhk7HUreN70_ERBvO-75hQzmG_MLI98ISEX9iWFmGLzh',
-    'client_secret': 'EN3whxCyg-hQeeMxxXlmunXHbno_OtqVpuJpeJFYAbZEbE8xav2ugJvqTMgr'
+    'client_id': 'AelEKi-x_p0SSdGOx-mQLqQpy5j0220Tr9PcWt2hqDwAsVmOvW6mp9IYSNoI3_qduYelfvY1DhPrhR8n',
+    'client_secret': 'EBPq1HVQbuf82Xx9UrOdOicDWydWH5cpTCrYc8mxpbs-29VJmifLxTH0eGA6wzlkei-Wwqgsz5K9fHia'
 }
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
@@ -136,6 +136,8 @@ POSTFINANCE = {
 PLATA_PAYMENT_MODULE_NAMES = {
     'paypal': _('Paypal and credit cards'),
     }
+PLATA_PAYMENT_MODULES = ('platarestapi.processor.paypal.SinglePaymentProcessor',
+    'platarestapi.processor.paypal.FuturePaymentProcessor')    
 
 PAYPAL = {
     'BUSINESS': 'macanhhuy@gmail.com',

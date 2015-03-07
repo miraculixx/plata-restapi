@@ -1,11 +1,14 @@
 import json
-from decimal import Decimal
 from django.http import HttpResponse
 import paypalrestsdk
 from conf.settings import PAYPAL_RESTPAYMENT
-import logging
-from platarestapi.models import PaymentAuthorization
 
+
+api = paypalrestsdk.configure({
+    "mode": PAYPAL_RESTPAYMENT.get('mode'),
+    "client_id": PAYPAL_RESTPAYMENT.get('client_id'),
+    "client_secret": PAYPAL_RESTPAYMENT.get('client_secret')
+})
 
 class JsonResponse(HttpResponse):
     """
@@ -19,265 +22,73 @@ class JsonResponse(HttpResponse):
             status=status
         )
 
-
-logging.basicConfig(level=logging.DEBUG)
-
-api = paypalrestsdk.configure({
-    "mode": PAYPAL_RESTPAYMENT.get('mode'),
-    "client_id": PAYPAL_RESTPAYMENT.get('client_id'),
-    "client_secret": PAYPAL_RESTPAYMENT.get('client_secret')
-})
-
-
-def verify_payment(payment, user=None):
-    '''
-
-    {
-       'update_time':   u'2014-12-28T17:05:30   Z',
-       'links':[
-          {
-             'href':         u'https://api.sandbox.paypal.com/v1/payments/payment/PAY-90538524N94629032KSQDQWQ',
-             'method':u'GET',
-             'rel':u'self'
-          }
-       ],
-       'payer':{
-          'payment_method':u'paypal',
-          'status':u'VERIFIED',
-          'payer_info':{
-             'first_name':u'SandboxTest',
-             'last_name':u'Account',
-             'email':u'huy@mac.com',
-             'payer_id':u'H7ZBSNRZ5C7DL'
-          }
-       },
-       'transactions':[
-          {
-             'amount':{
-                'currency':u'USD',
-                'total':u'500.00',
-                'details':{
-                   'subtotal':u'500.00'
-                }
-             },
-             'related_resources':[
-                {
-                   'sale':{
-                      'protection_eligibility':u'ELIGIBLE',
-                      'update_time':                  u'2014-12-28T17:05:30                  Z',
-                      'links':[
-                         {
-                            'href':                        u'https://api.sandbox.paypal.com/v1/payments/sale/88D15839HW0053230',
-                            'method':u'GET',
-                            'rel':u'self'
-                         },
-                         {
-                            'href':                        u'https://api.sandbox.paypal.com/v1/payments/sale/88D15839HW0053230/refund',
-                            'method':u'POST',
-                            'rel':u'refund'
-                         },
-                         {
-                            'href':                        u'https://api.sandbox.paypal.com/v1/payments/payment/PAY-90538524N94629032KSQDQWQ',
-                            'method':u'GET',
-                            'rel':u'parent_payment'
-                         }
-                      ],
-                      'protection_eligibility_type':u'ITEM_NOT_RECEIVED_ELIGIBLE,
-                      UNAUTHORIZED_PAYMENT_ELIGIBLE',
-                      'amount':{
-                         'currency':u'USD',
-                         'total':u'500.00'
-                      },
-                      'id':u'88D15839HW0053230',
-                      'state':u'completed',
-                      'create_time':                  u'2014-12-28T17:05:30                  Z',
-                      'payment_mode':u'INSTANT_TRANSFER',
-                      'parent_payment':u'PAY-90538524N94629032KSQDQWQ'
-                   }
-                }
-             ]
-          }
-       ],
-       'state':u'approved',
-       'create_time':   u'2014-12-28T17:05:30   Z',
-       'intent':u'sale',
-       'id':u'PAY-90538524N94629032KSQDQWQ'
-    }
-    '''
-    try:
-        import ast
-        payment_response = payment.data.get('capture').get('authorization').get('response')
-        print payment_response
-        payment_id = payment_response['id']
-        print payment_id
-        payment_server = paypalrestsdk.Payment.find(payment_id)
-        data = payment.data
-        data["verify"] = {
-            "response": json.loads(json.dumps(str(payment_server)))
-        }
-        payment.save()
-        if payment_server.state != 'approved':
-            return False, 'Payment has not been approved yet. Status is ' + payment_server.state + '.'
-
-        amount_client = payment.amount
-        currency_client = payment.currency
-
-        # Get most recent transaction
-        transaction = payment_server.transactions[0]
-        amount_server = transaction.amount.total
-        currency_server = transaction.amount.currency
-        if transaction.related_resources[0].authorization:
-            sale_state = transaction.related_resources[0].authorization.state
-        else:
-            sale_state = transaction.related_resources[0].sale.state
-        print sale_state
-        if (Decimal(amount_server) != Decimal(amount_client)):
-            return False, 'Payment amount does not match order.'
-        elif (currency_client != currency_server):
-            return False, 'Payment currency does not match order.'
-        elif sale_state == 'captured':
-            return True, 'Payment has been captured.'
-        elif sale_state != 'completed':
-            return False, 'Sale not completed.'
-        elif sale_state == 'completed':
-            return True, 'Payment has been completed.'
-        else:    
-            return False, 'Payment has an unknown state ' + sale_state
-        # elif response_type == 'authorization_code':
-        #     return True, 'Received consent'
-        #
-        # else:
-        #     return False, 'Invalid response type'
-
-    except paypalrestsdk.ResourceNotFound:
-        return False, 'Payment Not Found'
-
-
-def get_refresh_token(user=None):
-    """Send authorization code after obtaining customer
-    consent. Exchange for long living refresh token for
-    creating payments in future
+class BucketObject(object):
     """
-    refresh_token = None
-    if PaymentAuthorization.objects.filter(user=user):
-        payment_authorization = PaymentAuthorization.objects.filter(user=user).first()
-        refresh_token = payment_authorization.refresh_token
-    return refresh_token
-
-
-def charge_wallet(payment, transaction, correlation_id=None, intent="authorize", user=None):
-    """Charge a customer who formerly consented to future payments
-    from paypal wallet.
-    {
-       'update_time':   u'2014-12-19T14:26:49   Z',
-       'payer':{
-          'payment_method':u'paypal',
-          'status':u'VERIFIED',
-          'payer_info':{
-             'first_name':u'SandboxTest',
-             'last_name':u'Account',
-             'email':u'huy@mac.com',
-             'payer_id':u'H7ZBSNRZ5C7DL'
-          }
-       },
-       'links':[
-          {
-             'href':         u'https://api.sandbox.paypal.com/v1/payments/payment/PAY-0BV260076T944302DKSKDLJY',
-             'method':u'GET',
-             'rel':u'self'
-          }
-       ],
-       'transactions':[
-          {
-             'amount':{
-                'currency':u'USD',
-                'total':u'100.00',
-                'details':{
-                   'subtotal':u'100.00'
-                }
-             },
-             'related_resources':[
-                {
-                   'authorization':{
-                      'valid_until':                  u'2015-01-17T14:26:47                  Z',
-                      'protection_eligibility':u'INELIGIBLE',
-                      'update_time':                  u'2014-12-19T14:26:49                  Z',
-                      'links':[
-                         {
-                            'href':                        u'https://api.sandbox.paypal.com/v1/payments/authorization/1U302828U8702213S',
-                            'method':u'GET',
-                            'rel':u'self'
-                         },
-                         {
-                            'href':                        u'https://api.sandbox.paypal.com/v1/payments/authorization/1U302828U8702213S/capture',
-                            'method':u'POST',
-                            'rel':u'capture'
-                         },
-                         {
-                            'href':                        u'https://api.sandbox.paypal.com/v1/payments/authorization/1U302828U8702213S/void',
-                            'method':u'POST',
-                            'rel':u'void'
-                         },
-                         {
-                            'href':                        u'https://api.sandbox.paypal.com/v1/payments/authorization/1U302828U8702213S/reauthorize',
-                            'method':u'POST',
-                            'rel':u'reauthorize'
-                         },
-                         {
-                            'href':                        u'https://api.sandbox.paypal.com/v1/payments/payment/PAY-0BV260076T944302DKSKDLJY',
-                            'method':u'GET',
-                            'rel':u'parent_payment'
-                         }
-                      ],
-                      'amount':{
-                         'currency':u'USD',
-                         'total':u'100.00',
-                         'details':{
-                            'subtotal':u'100.00'
-                         }
-                      },
-                      'id':u'1U302828U8702213S',
-                      'state':u'authorized',
-                      'create_time':                  u'2014-12-19T14:26:47                  Z',
-                      'payment_mode':u'INSTANT_TRANSFER',
-                      'parent_payment':u'PAY-0BV260076T944302DKSKDLJY'
-                   }
-                }
-             ]
-          }
-       ],
-       'state':u'approved',
-       'create_time':   u'2014-12-19T14:26:47   Z',
-       'intent':u'authorize',
-       'id':u'PAY-0BV260076T944302DKSKDLJY'
-    }
+    Container to keep data that doesn't conform to any orm model, but has to be returned
+    by some resources.
     """
-    pp_payment = paypalrestsdk.Payment({
-        "intent": intent,
-        "payer": {
-            "payment_method": "paypal"
-        },
-        "transactions": [{
-                             "amount": {
-                                 "total": transaction["amount"]["total"],
-                                 "currency": transaction["amount"]["currency"]
-                             },
-                             "description": transaction["description"]
-                         }]})
-    refresh_token = get_refresh_token(user)
 
-    if not refresh_token:
-        return False, "Customer has not granted consent as no refresh token has been found for customer. Authorization code needed to get new refresh token."
+    def __init__(self, initial=None):
+        self.__dict__['_data'] = {}
 
-    if pp_payment.create(refresh_token, correlation_id):
-        print("Payment %s created successfully" % (pp_payment.id))
-        if pp_payment['intent'] == "authorize":
-            authorization_id = pp_payment['transactions'][0]['related_resources'][0]['authorization']['id']
-            print(
-                "Payment %s authorized. Authorization id is %s" % (
-                    pp_payment.id, authorization_id
-                )
-            )
-        return pp_payment, "Charged customer " + user.username + " " + transaction["amount"]["total"]
-    else:
-        return False, "Error while creating payment:" + str(payment.error)
+        if hasattr(initial, 'items'):
+            self.__dict__['_data'] = initial
+
+    def __getattr__(self, name):
+        return self._data.get(name, None)
+
+    def __setattr__(self, name, value):
+        self.__dict__['_data'][name] = value
+
+    def to_dict(self):
+        return self._data
+
+
+class dict2obj(object):
+    """
+    Convert dictionary to object
+    @source http://stackoverflow.com/a/1305561/383912
+    """
+
+    def __init__(self, d):
+        self.__dict__['d'] = d
+
+    def __getattr__(self, key):
+        value = self.__dict__['d'][key]
+        if type(value) == type({}):
+            return dict2obj(value)
+
+        return value
+    
+    
+class ShopUtil(object):
+    @property
+    def shop(self):
+        """
+        use this to get a shop instance without interfering
+        with the Django startup. If you include shop_instance
+        in the top level you may end up importing too much for
+        Django to chew on during module loading.
+        """
+        from plata import shop_instance
+        return shop_instance()
+    
+    def get_shop_instance(self):
+        return self.shop
+        
+    def get_payment_processor(self, method):
+        """
+        from plata.shop.forms:152
+        """
+        payment_modules = self.shop.get_payment_modules()
+        module = dict((m.key, m) for m in payment_modules).get(method)
+        assert module is not None, ("Payment processor for method %s "
+                        "not found in %s" % (method, payment_modules))
+        return module
+     
+    def get_processor_by_payment(self, payment):
+        """
+        return the payment processor for a payment
+        :param payment: Plata payment instance
+        """
+        return self.get_payment_processor(payment.payment_module_key)

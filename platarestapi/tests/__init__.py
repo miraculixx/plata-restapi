@@ -1,0 +1,1 @@
+from platarestapi.tests.test_paypal import OrderPaymentPaypalTests
