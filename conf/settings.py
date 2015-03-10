@@ -158,3 +158,9 @@ logging.basicConfig(
 
 PLATA_SHOP_PRODUCT = 'shop.Product'
 CURRENCIES = ('USD',)
+
+# testing configuration
+testuser, testuser_pw = os.environ.get('PAYPAL_TESTUSER',':').split(':')
+assert testuser and testuser_pw, "export PAYPAL_TESTUSER=user:passsword"
+PAYPAL_TESTUSER = testuser
+PAYPAL_TESTUSER_PASSWORD = testuser_pw

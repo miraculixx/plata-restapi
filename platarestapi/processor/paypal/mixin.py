@@ -9,6 +9,8 @@ import json
 import paypalrestsdk
 
 from platarestapi.models import PaymentAuthorization
+from platarestapi.utils import api, JsonResponse
+
 
 class PaypalConstants:
     # states
@@ -88,17 +90,48 @@ class PaypalProcessorMixin(object):
                                               ' (expected %s)' % (sale_state, 
                                                             expected_tx_state))
         
-    def get_refresh_token(self, user=None):
-        """Send authorization code after obtaining customer
-        consent. Exchange for long living refresh token for
-        creating payments in future
+    def get_refresh_token(self, user):
+        """
+        get refresh token for user as stored in PaymentAuthorization
         """
         refresh_token = None
-        if PaymentAuthorization.objects.filter(user=user):
-            payment_authorization = PaymentAuthorization.objects.filter(user=user).first()
+        payment_authorization = PaymentAuthorization.objects.filter(user=user)
+        if payment_authorization:
             refresh_token = payment_authorization.refresh_token
         return refresh_token
     
+    def process_future_authorization(self, user, authorization):
+        """
+        process a future authorization
+        
+        Send authorization code after obtaining customer
+        consent. Exchange for long living access and refresh token for
+        creating payments in future. Will store the new tokens in 
+        PaymentAuthorization for future payments to use.
+        
+        :see: # https://developer.paypal.com/docs/integration/mobile/make-future-payment/#exchange-the-auth-code-for-refresh-and-access-tokens
+        
+        :param user: the Django user this authorization is for
+        :param authorization: the authorization code received from the client
+        """
+        try:
+            refresh_token = api.get_refresh_token(authorization)
+        except Exception, e:
+            return False, "could not retrieve refresh token, %s" % e
+        try:
+            access_token = api.get_access_token(refresh_token=refresh_token)
+        except Exception, e:
+            return False, "could not retrieve access token, %s" % e
+        payment_authorization = PaymentAuthorization.objects.filter(user=user).first()
+        if payment_authorization:
+            payment_authorization.access_token = access_token
+            payment_authorization.refresh_token = refresh_token
+            payment_authorization.save()
+        else:
+            opt=dict(user=user, access_token=access_token, 
+                     refresh_token=refresh_token)
+            payment_authorization = PaymentAuthorization.objects.create(**opt)
+        return True, "successfully authorized for future payments"
     
     def charge_wallet(self, payment, transaction, correlation_id=None, intent="authorize", user=None):
         """Charge a customer who formerly consented to future payments

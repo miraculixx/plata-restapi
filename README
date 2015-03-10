@@ -1,0 +1,10 @@
+
+Pre-requisites
+==============
+
+pip install requirements.txt
+sudo apt-get install xvfb
+
+To enable automated payment approval during the tests, do:
+
+export PAYPAL_TESTUSER=testuser@example.com:GreatPassword

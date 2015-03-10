@@ -7,7 +7,6 @@ from tastypie.authorization import DjangoAuthorization
 from tastypie.resources import ModelResource
 
 from platarestapi.actions import actionurls, action
-from platarestapi.models import PaymentAuthorization
 from platarestapi.utils import JsonResponse, ShopUtil, api
 from tastypie.exceptions import BadRequest
 from platarestapi.processor.paypal.mixin import PaypalConstants
@@ -148,49 +147,25 @@ class PaymentResource(ModelResource):
         processor = self.shoputil.get_processor_by_payment(payment)
         return processor.process_order_confirmed(request, payment.order)
 
-    @action(allowed=['post'], require_loggedin=True)
-    def approval(self, request, **kwargs):
+    @action(allowed=['post'], static=True, require_loggedin=True)
+    def authorize(self, request, **kwargs):
         '''
-        /api/v1/payment/1/approval/?username=admin&api_key=53bf26edd8fc0252db480c746cfe995e1facb928
-        {
-            "response": {
-                "code": "EGZU4qcUF7hBLSzo4toZ5QlKwNR7dXbookRNvVhATn_l-EJNj1b3naxqZBbryG4F3ujWqf3a7TmM-bfA1v21S9Vptnj_VYV51FJTEZtCn0E-ZF2YgKeYmyw60W8d1xAePUt4c0zbYhRrSRiDgdnoQJ4"
-            },
-            "client": {
-                "platform": "Android",
-                "paypal_sdk_version": "2.7.1",
-                "product_name": "PayPal-Android-SDK",
-                "environment": "sandbox"
-            },
-            "response_type": "authorization_code"
-        }
+        authorize future payments
         '''
         user = request.user
         body = json.loads(request.body)
-        auth_code = body['response']['code']
-        print auth_code
+        authorization = body.get('authorization')
+        auth_code = authorization['response']['code']
+        method = body['method']
+        # start processing
         try:
-
-            refresh_token = api.get_refresh_token(auth_code)
-            print refresh_token
-        except Exception, e:
-            print str(e)
-            return JsonResponse({"status": "fail", "msg": str(e)})
-        if PaymentAuthorization.objects.filter(user=user):
-            payment_authorization = PaymentAuthorization.objects.filter(user=user).first()
-            payment_authorization.access_token = auth_code
-            payment_authorization.refresh_token = refresh_token
-            payment_authorization.save()
-            print payment_authorization
-        else:
-            payment_authorization = PaymentAuthorization(user=user)
-            payment_authorization.access_token = auth_code
-
-            payment_authorization.refresh_token = refresh_token
-            payment_authorization.save()
-            print payment_authorization
-        return JsonResponse({"status": "success", "auth_code": auth_code})
-
+            processor = self.shoputil.get_payment_processor(method)
+        except:
+            raise BadRequest('invalid payment method %s' % method)
+        success, msg = processor.process_future_authorization(user, auth_code)
+        if success:
+            return JsonResponse({"status": 'success', "msg": msg}, status=201)
+        return JsonResponse({"status": 'fail', "msg": msg}, status=400)
         
     @property
     def shoputil(self):
@@ -200,7 +175,6 @@ class PaymentResource(ModelResource):
     def shop(self):
         return self.shoputil
     
-
     class Meta:
         queryset = OrderPayment.objects.all()
         resource_name = 'payment'

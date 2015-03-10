@@ -49,53 +49,20 @@ def action(name=None,
            static=False,
            url=None):
     def wrap(method):
-        def wrapped_f(self, request, *args, **kwargs):
-
+        def dispatch(self, request, *args, **kwargs):
+            # standard tastypie processing, see Resource.dispatch()
             self.method_check(request, allowed=allowed)
-
-            if require_loggedin is True:
-                if request.META.get('HTTP_AUTHORIZATION') and request.META['HTTP_AUTHORIZATION'].lower().startswith(
-                        'apikey '):
-                    (auth_type, data) = request.META['HTTP_AUTHORIZATION'].split()
-
-                    if auth_type.lower() != 'apikey':
-                        raise ValueError("Incorrect authorization header.")
-
-                    username, api_key = data.split(':', 1)
-                else:
-                    username = request.GET.get('username') or request.POST.get('username')
-                    api_key = request.GET.get('api_key') or request.POST.get('api_key')
-                try:
-                    lookup_kwargs = {'username': username}
-                    user = User.objects.get(**lookup_kwargs)
-                    from tastypie.models import ApiKey
-
-                    try:
-                        ApiKey.objects.get(user=user, key=api_key)
-                        request.user = user
-                    except ApiKey.DoesNotExist:
-                        raise Unauthorized(
-                            "User must be logged in to perform this opperation")
-                except (User.DoesNotExist, User.MultipleObjectsReturned):
-                    raise Unauthorized(
-                        "User must be logged in to perform this opperation")
-
-                if not (request.user and request.user.is_authenticated()):
-                    raise Unauthorized(
-                        "User must be logged in to perform this opperation")
-
+            if require_loggedin:
+                self.is_authenticated(request)
+            self.throttle_check(request)
             res = method(self, request, *args, **kwargs)
             return res
-
-        wrapped_f.is_auto_action = True
-        wrapped_f.auto_action_static = static
-
+        # setup dispatch method 
+        dispatch.is_auto_action = True
+        dispatch.auto_action_static = static
         if not name is None:
-            wrapped_f.auto_action_name = name
-
+            dispatch.auto_action_name = name
         if not url is None:
-            wrapped_f.auto_action_url = url
-
-        return wrapped_f
-
+            dispatch.auto_action_url = url
+        return dispatch
     return wrap

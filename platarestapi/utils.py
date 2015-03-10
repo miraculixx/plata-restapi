@@ -92,3 +92,4 @@ class ShopUtil(object):
         :param payment: Plata payment instance
         """
         return self.get_payment_processor(payment.payment_module_key)
+    
