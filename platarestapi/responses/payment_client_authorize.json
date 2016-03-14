@@ -1,0 +1,12 @@
+authorization: {
+    "response": {
+        "code": "EB80JJwthY9giYQd7_SxbaOzws0gn8rhzdCCS-GKfyCXWXV2lTX3St3IMweV9m2hSoSeHh9y5Pzmkg2dUxz1n0eVt_2r3mGkms1FYfwwPwKCT4ccUOX6Sq3VhLEfKUXams3l4BQeJksT13ULGyTWDjVtyU_wR6gdkj81f5Yxw2_N"
+    },
+    "client": {
+        "platform": "Android",
+        "paypal_sdk_version": "2.7.1",
+        "product_name": "PayPal-Android-SDK",
+        "environment": "sandbox"
+    },
+    "response_type": "authorization_code"
+} 

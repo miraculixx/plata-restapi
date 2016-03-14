@@ -1,0 +1,71 @@
+{
+           'update_time':   u'2014-12-28T17:05:30   Z',
+           'links':[
+              {
+                 'href': u'https://api.sandbox.paypal.com/v1/payments/payment/PAY-90538524N94629032KSQDQWQ',
+                 'method':u'GET',
+                 'rel':u'self'
+              }
+           ],
+           'payer':{
+              'payment_method':u'paypal',
+              'status':u'VERIFIED',
+              'payer_info':{
+                 'first_name':u'SandboxTest',
+                 'last_name':u'Account',
+                 'email':u'huy@mac.com',
+                 'payer_id':u'H7ZBSNRZ5C7DL'
+              }
+           },
+           'transactions':[
+              {
+                 'amount':{
+                    'currency':u'USD',
+                    'total':u'500.00',
+                    'details':{
+                       'subtotal':u'500.00'
+                    }
+                 },
+                 'related_resources':[
+                    {
+                       'sale':{
+                          'protection_eligibility':u'ELIGIBLE',
+                          'update_time':                  u'2014-12-28T17:05:30                  Z',
+                          'links':[
+                             {
+                                'href':                        u'https://api.sandbox.paypal.com/v1/payments/sale/88D15839HW0053230',
+                                'method':u'GET',
+                                'rel':u'self'
+                             },
+                             {
+                                'href':                        u'https://api.sandbox.paypal.com/v1/payments/sale/88D15839HW0053230/refund',
+                                'method':u'POST',
+                                'rel':u'refund'
+                             },
+                             {
+                                'href':                        u'https://api.sandbox.paypal.com/v1/payments/payment/PAY-90538524N94629032KSQDQWQ',
+                                'method':u'GET',
+                                'rel':u'parent_payment'
+                             }
+                          ],
+                          'protection_eligibility_type':u'ITEM_NOT_RECEIVED_ELIGIBLE,
+                          UNAUTHORIZED_PAYMENT_ELIGIBLE',
+                          'amount':{
+                             'currency':u'USD',
+                             'total':u'500.00'
+                          },
+                          'id':u'88D15839HW0053230',
+                          'state':u'completed',
+                          'create_time':                  u'2014-12-28T17:05:30                  Z',
+                          'payment_mode':u'INSTANT_TRANSFER',
+                          'parent_payment':u'PAY-90538524N94629032KSQDQWQ'
+                       }
+                    }
+                 ]
+              }
+           ],
+           'state':u'approved',
+           'create_time':   u'2014-12-28T17:05:30   Z',
+           'intent':u'sale',
+           'id':u'PAY-90538524N94629032KSQDQWQ'
+        }

@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.translation import ugettext_lazy as _
-
+from platarestapi.models import *
 from . import models
 
 
@@ -18,6 +18,7 @@ class ProductAdmin(admin.ModelAdmin):
     search_fields = ('name', 'description')
 
 admin.site.register(models.Product, ProductAdmin)
+admin.site.register(PaymentAuthorization)
 
 admin.site.register(models.Contact,
     list_display=('user', 'zip_code', 'city', 'country'),

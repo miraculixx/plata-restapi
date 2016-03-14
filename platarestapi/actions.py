@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 from django.conf.urls import url
+from django.contrib.auth.models import User
 from tastypie.exceptions import Unauthorized
 from tastypie.utils import trailing_slash
 
@@ -48,27 +49,20 @@ def action(name=None,
            static=False,
            url=None):
     def wrap(method):
-        def wrapped_f(self, request, *args, **kwargs):
-
+        def dispatch(self, request, *args, **kwargs):
+            # standard tastypie processing, see Resource.dispatch()
             self.method_check(request, allowed=allowed)
-
-            if require_loggedin is True:
-                if not (request.user and request.user.is_authenticated()):
-                    raise Unauthorized(
-                        "User must be logged in to perform this opperation")
-
+            if require_loggedin:
+                self.is_authenticated(request)
+            self.throttle_check(request)
             res = method(self, request, *args, **kwargs)
             return res
-
-        wrapped_f.is_auto_action = True
-        wrapped_f.auto_action_static = static
-
+        # setup dispatch method 
+        dispatch.is_auto_action = True
+        dispatch.auto_action_static = static
         if not name is None:
-            wrapped_f.auto_action_name = name
-
+            dispatch.auto_action_name = name
         if not url is None:
-            wrapped_f.auto_action_url = url
-
-        return wrapped_f
-
+            dispatch.auto_action_url = url
+        return dispatch
     return wrap
